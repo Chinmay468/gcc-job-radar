@@ -14,6 +14,7 @@ from gcc_job_radar.bot_listener import (
 )
 from gcc_job_radar.db import get_job_by_id, init_db, mark_job_status, record_jobs
 from gcc_job_radar.models import ATSProvider, JobPosting
+from gcc_job_radar.apply_prep import FormPrepResult
 
 
 @pytest.fixture
@@ -249,6 +250,29 @@ def test_build_job_inline_keyboard_standard(sample_jobs: list[JobPosting]) -> No
     assert rows[1][1]["callback_data"] == f"applied:{job.id}"
 
 
+def test_build_job_inline_keyboard_best_fit(sample_jobs: list[JobPosting]) -> None:
+    """Verify ⭐ Best Fit jobs include 'Prep Application' button in inline keyboard."""
+    job = sample_jobs[0]
+    # Test via tier attribute
+    job.tier = "⭐ Best Fit"
+    markup = build_job_inline_keyboard(job)
+    rows = markup["inline_keyboard"]
+    assert len(rows[1]) == 3
+    assert rows[1][0]["text"] == "Prep Application"
+    assert rows[1][0]["callback_data"] == f"prep_apply:{job.id}"
+    assert rows[1][1]["text"] == "Dismiss"
+    assert rows[1][2]["text"] == "Applied"
+
+    # Test via explicit is_best_fit=True
+    markup2 = build_job_inline_keyboard(job, is_best_fit=True)
+    assert markup2["inline_keyboard"][1][0]["text"] == "Prep Application"
+
+    # Test non-best fit does not include it
+    job.tier = "⚡ Strong Fit"
+    markup3 = build_job_inline_keyboard(job)
+    assert len(markup3["inline_keyboard"][1]) == 2
+
+
 def test_build_job_inline_keyboard_with_search_url_or_needs_resolve() -> None:
     """Verify conditional 'Search Direct ATS' button is added when direct_search_url or NEEDS_RESOLVE present."""
     job_with_search = JobPosting(
@@ -385,6 +409,71 @@ async def test_callback_query_applied(tmp_path: Path, sample_jobs: list[JobPosti
         answer_call = next(req for req in captured_requests if "answerCallbackQuery" in req["url"])
         assert answer_call["data"]["callback_query_id"] == "cb_query_888"
         assert "Applied" in answer_call["data"]["text"]
+
+
+@pytest.mark.asyncio
+async def test_callback_query_prep_apply(tmp_path: Path, sample_jobs: list[JobPosting]) -> None:
+    """Verify prep_apply callback query triggers tailoring, form prep, and replies with summary."""
+    db_file = tmp_path / "bot_cb_prep_apply.db"
+    init_db(db_file)
+    record_jobs(sample_jobs, db_file)
+
+    job = get_job_by_id(sample_jobs[0].id, db_path=db_file)
+    rowid = job["numeric_id"]
+
+    captured_requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        data = json.loads(request.content.decode("utf-8")) if request.content else {}
+        captured_requests.append({"url": str(request.url), "data": data})
+        return httpx.Response(200, json={"ok": True})
+
+    callback_query = {
+        "id": "cb_query_777",
+        "from": {"id": 123456},
+        "data": f"prep_apply:{rowid}",
+        "message": {
+            "message_id": 45,
+            "chat": {"id": 123456},
+            "text": "🚀 Celonis\n💼 Associate Software Engineer",
+        },
+    }
+
+    mock_prep_result = FormPrepResult(
+        job_id=str(rowid),
+        company="Celonis",
+        title="Associate Software Engineer",
+        apply_url="https://job-boards.greenhouse.io/celonis/jobs/7791267003",
+        status="READY_LOCAL",
+        prefilled_fields=["Full Name: Chinmay Maheshwari", "Email: chinmay@example.com"],
+        drafted_questions=[{"question": "Why Celonis?", "answer": "I love process mining.", "is_ai": True}],
+        manual_fields=[],
+    )
+
+    with patch("gcc_job_radar.bot_listener.tailor_resume_for_job", return_value=(None, None)), \
+         patch("gcc_job_radar.bot_listener.prep_job_application", new_callable=AsyncMock, return_value=mock_prep_result):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            result = await handle_callback_query(
+                callback_query=callback_query,
+                bot_token="test_token",
+                allowed_chat_id="123456",
+                client=client,
+                db_path=db_file,
+            )
+
+            assert result is True
+
+            # Check answerCallbackQuery was called
+            answer_call = next(req for req in captured_requests if "answerCallbackQuery" in req["url"])
+            assert answer_call["data"]["callback_query_id"] == "cb_query_777"
+
+            # Check sendMessage summary was dispatched
+            send_call = next(req for req in captured_requests if "sendMessage" in req["url"])
+            assert "Celonis" in send_call["data"]["text"]
+            assert "Pre-filled Fields" in send_call["data"]["text"]
+            assert "AI-Drafted" in send_call["data"]["text"]
+            reply_markup = send_call["data"]["reply_markup"]
+            assert any(btn["callback_data"] == f"applied:{rowid}" for row in reply_markup["inline_keyboard"] for btn in row)
 
 
 @pytest.mark.asyncio

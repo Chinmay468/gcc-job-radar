@@ -49,6 +49,7 @@ from gcc_job_radar.models import JobPosting, ATSProvider
 from gcc_job_radar.notifier import build_job_inline_keyboard
 from gcc_job_radar.presentation import build_ranked_presentation, format_jobs_html
 from gcc_job_radar.resume_tailor_bridge import tailor_resume_for_job
+from gcc_job_radar.apply_prep import prep_job_application
 from gcc_job_radar.display import console
 
 logger = logging.getLogger(__name__)
@@ -1129,6 +1130,144 @@ async def handle_callback_query(
                 f"⚠️ Could not tailor resume for {comp_name}. Please verify GROQ_API_KEY in .env.",
                 client,
             )
+        return True
+
+    # 5. Handle Prep Application: "prep_apply:{job_id}"
+    elif data.startswith("prep_apply:"):
+        job_id = data.split("prep_apply:", 1)[1].strip()
+        target_job = get_job_by_id(job_id, db_path=db_path)
+        if not target_job:
+            if cb_id:
+                try:
+                    await client.post(
+                        f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+                        json={"callback_query_id": cb_id, "text": f"Job #{job_id} not found.", "show_alert": True},
+                        timeout=5.0,
+                    )
+                except Exception:
+                    pass
+            return False
+
+        comp_name = target_job.get("company", "Company")
+        title_name = target_job.get("title", f"#{job_id}")
+
+        if cb_id:
+            try:
+                await client.post(
+                    f"https://api.telegram.org/bot{bot_token}/answerCallbackQuery",
+                    json={
+                        "callback_query_id": cb_id,
+                        "text": f"⏳ Prepping application for {comp_name}...",
+                    },
+                    timeout=5.0,
+                )
+            except Exception as exc:
+                logger.debug("Failed answering callback query on prep_apply: %s", exc)
+
+        job_obj = _dict_to_job_posting(target_job)
+
+        await send_telegram_chat_action(bot_token, chat_id, client, "typing")
+
+        # 1. Tailor resume (force=True to tailor upon explicit user request)
+        tex_path, pdf_path = None, None
+        try:
+            tex_path, pdf_path = tailor_resume_for_job(job_obj, force=True)
+            if pdf_path and Path(pdf_path).is_file():
+                await send_telegram_document(
+                    bot_token,
+                    chat_id,
+                    pdf_path,
+                    f"📄 <b>Tailored Resume PDF for {comp_name}</b> — {html.escape(title_name)}",
+                    client,
+                )
+            elif tex_path and Path(tex_path).is_file():
+                await send_telegram_document(
+                    bot_token,
+                    chat_id,
+                    tex_path,
+                    f"📄 <b>Tailored Resume LaTeX for {comp_name}</b>",
+                    client,
+                )
+        except Exception as exc:
+            logger.warning("Error during resume tailoring in prep_apply: %s", exc)
+
+        # 2. Execute Form Prep Engine
+        prep_result = await prep_job_application(
+            job=job_obj,
+            tailored_pdf_path=pdf_path,
+            tailored_tex_path=tex_path,
+            client=client,
+            db_path=db_path,
+        )
+
+        # 3. Format Response Message
+        status_icons = {
+            "READY_LOCAL": "🖥️ <b>Application Pre-filled & Ready (Desktop Browser)</b>",
+            "READY_REMOTE": "🌐 <b>Application Pre-filled & Ready (Remote Session)</b>",
+            "FALLBACK_DRAFT": "📋 <b>Application Draft Prepared (Direct Portal)</b>",
+            "ALREADY_PREPPED": "ℹ️ <b>Application Already Prepared</b>",
+            "FAILED": "❌ <b>Application Prep Failed</b>",
+        }
+        header_text = status_icons.get(prep_result.status, "📋 <b>Application Prep</b>")
+
+        reply_lines = [
+            f"{header_text}",
+            f"🏢 <b>{html.escape(comp_name)}</b> — {html.escape(title_name)}",
+            "",
+        ]
+
+        if prep_result.prefilled_fields:
+            reply_lines.append("📝 <b>Pre-filled Fields:</b>")
+            for f_text in prep_result.prefilled_fields:
+                reply_lines.append(f"• {html.escape(f_text)}")
+            reply_lines.append("")
+
+        if prep_result.drafted_questions:
+            reply_lines.append("🤖 <b>Screening Questions:</b>")
+            for q_item in prep_result.drafted_questions:
+                q_text = html.escape(str(q_item.get("question", "")))
+                a_text = html.escape(str(q_item.get("answer", "")))
+                is_ai = q_item.get("is_ai", False)
+                tag = "<i>(AI-Drafted — please review)</i>" if is_ai else "<i>(Factual)</i>"
+                reply_lines.append(f"❓ <b>{q_text}</b> {tag}\n👉 <code>{a_text}</code>")
+            reply_lines.append("")
+
+        if prep_result.manual_fields:
+            reply_lines.append("⚠️ <b>Needs Your Attention:</b>")
+            for m_text in prep_result.manual_fields:
+                reply_lines.append(f"• {html.escape(m_text)}")
+            reply_lines.append("")
+
+        if prep_result.status == "READY_LOCAL":
+            reply_lines.append("✨ <i>Browser is open on your desktop! Review fields, enter any missing items, and click Submit.</i>")
+        elif prep_result.status == "READY_REMOTE" and prep_result.interactive_url:
+            reply_lines.append(f"🔗 <a href=\"{prep_result.interactive_url}\"><b>Open Interactive Pre-filled Form</b></a>")
+        elif prep_result.status == "FALLBACK_DRAFT":
+            reply_lines.append(f"🔗 <a href=\"{job_obj.apply_url}\"><b>Open Career Apply Page</b></a>")
+            reply_lines.append("<i>Copy-paste the answers above and attach the tailored resume.</i>")
+        elif prep_result.message:
+            reply_lines.append(f"<i>{html.escape(prep_result.message)}</i>")
+
+        reply_markup: dict[str, Any] = {
+            "inline_keyboard": [
+                [
+                    {"text": "Applied", "callback_data": f"applied:{job_id}"},
+                    {"text": "Dismiss", "callback_data": f"dismiss:{job_id}"},
+                ]
+            ]
+        }
+        if prep_result.interactive_url:
+            reply_markup["inline_keyboard"].insert(0, [{"text": "🌐 Open Form", "url": prep_result.interactive_url}])
+        elif prep_result.status == "FALLBACK_DRAFT":
+            reply_markup["inline_keyboard"].insert(0, [{"text": "🔗 Apply Link", "url": str(job_obj.apply_url)}])
+
+        await send_telegram_reply(
+            bot_token,
+            chat_id,
+            "\n".join(reply_lines),
+            client,
+            reply_markup=reply_markup,
+        )
         return True
 
     return False

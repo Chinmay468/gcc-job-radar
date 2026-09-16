@@ -67,6 +67,7 @@ class JobPosting(BaseModel):
     why: Optional[str] = None
     tailored_tex_path: Optional[str] = None
     tailored_pdf_path: Optional[str] = None
+    tier: Optional[str] = None
 
 
 # Backward compatible alias referenced in legacy tests and scripts

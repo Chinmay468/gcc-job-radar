@@ -91,15 +91,20 @@ async def send_discord_notification(
     return success
 
 
-def build_job_inline_keyboard(job: JobPosting | dict[str, Any]) -> dict[str, Any]:
+def build_job_inline_keyboard(
+    job: JobPosting | dict[str, Any],
+    is_best_fit: Optional[bool] = None,
+    tier: Optional[str] = None,
+) -> dict[str, Any]:
     """Build Telegram InlineKeyboardMarkup for an individual job posting card.
 
     Requirements:
     - Button 1 (URL): "Apply" pointing to apply_url.
     - Button 2 (URL, conditional): If status is 'NEEDS_RESOLVE' or direct_search_url is present,
       add "Search Direct ATS" pointing to direct_search_url.
-    - Button 3 (Callback): "Dismiss" (callback_data="dismiss:{job_id}").
-    - Button 4 (Callback): "Applied" (callback_data="applied:{job_id}").
+    - Button 3 (Callback, conditional): If ⭐ Best Fit, add "Prep Application" (callback_data="prep_apply:{job_id}").
+    - Button 4 (Callback): "Dismiss" (callback_data="dismiss:{job_id}").
+    - Button 5 (Callback): "Applied" (callback_data="applied:{job_id}").
     """
     if isinstance(job, JobPosting):
         job_id = job.numeric_id if job.numeric_id is not None else job.id
@@ -107,12 +112,16 @@ def build_job_inline_keyboard(job: JobPosting | dict[str, Any]) -> dict[str, Any
         apply_url = str(effective_url) if effective_url else str(job.apply_url)
         direct_search_url = str(job.direct_search_url) if job.direct_search_url else None
         status = getattr(job, "status", "NEW")
+        job_tier = getattr(job, "tier", None)
     else:
         job_id = job.get("numeric_id") if job.get("numeric_id") is not None else job.get("id", "")
         effective_url, _, _ = resolve_effective_apply_url(job)
         apply_url = str(effective_url) if effective_url else str(job.get("apply_url", ""))
         direct_search_url = str(job.get("direct_search_url")) if job.get("direct_search_url") else None
         status = job.get("status", "NEW")
+        job_tier = job.get("tier")
+
+    best_fit = is_best_fit if is_best_fit is not None else ((tier or job_tier) == "⭐ Best Fit")
 
     # Row 1: URL Navigation Buttons
     row_1: list[dict[str, str]] = [{"text": "Apply", "url": apply_url}]
@@ -120,10 +129,11 @@ def build_job_inline_keyboard(job: JobPosting | dict[str, Any]) -> dict[str, Any
         row_1.append({"text": "Search Direct ATS", "url": direct_search_url})
 
     # Row 2: Interactive Callback Buttons
-    row_2: list[dict[str, str]] = [
-        {"text": "Dismiss", "callback_data": f"dismiss:{job_id}"},
-        {"text": "Applied", "callback_data": f"applied:{job_id}"},
-    ]
+    row_2: list[dict[str, str]] = []
+    if best_fit:
+        row_2.append({"text": "Prep Application", "callback_data": f"prep_apply:{job_id}"})
+    row_2.append({"text": "Dismiss", "callback_data": f"dismiss:{job_id}"})
+    row_2.append({"text": "Applied", "callback_data": f"applied:{job_id}"})
 
     return {
         "inline_keyboard": [row_1, row_2]
@@ -249,11 +259,15 @@ async def send_telegram_notification(
             job_id = job.numeric_id if job.numeric_id is not None else job.id
             effective_url, _, _ = resolve_effective_apply_url(job)
             apply_url = str(effective_url) if effective_url else str(job.apply_url)
-            row = [
+            is_job_best = getattr(job, "tier", None) == "⭐ Best Fit"
+            row = []
+            if is_job_best:
+                row.append({"text": f"Prep #{idx}", "callback_data": f"prep_apply:{job_id}"})
+            row.extend([
                 {"text": f"Apply #{idx}", "url": apply_url},
                 {"text": f"Dismiss #{idx}", "callback_data": f"dismiss:{job_id}"},
                 {"text": f"Applied #{idx}", "callback_data": f"applied:{job_id}"},
-            ]
+            ])
             keyboard_rows.append(row)
         reply_markup = {"inline_keyboard": keyboard_rows}
 

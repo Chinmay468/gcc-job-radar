@@ -194,10 +194,25 @@ def build_ranked_presentation(
 
     tiers: list[JobTier] = []
     if best_fit_jobs:
+        for j in best_fit_jobs:
+            if isinstance(j, JobPosting):
+                j.tier = "⭐ Best Fit"
+            elif isinstance(j, dict):
+                j["tier"] = "⭐ Best Fit"
         tiers.append(JobTier(label="⭐ Best Fit", jobs=best_fit_jobs))
     if strong_fit_jobs:
+        for j in strong_fit_jobs:
+            if isinstance(j, JobPosting):
+                j.tier = "⚡ Strong Fit"
+            elif isinstance(j, dict):
+                j["tier"] = "⚡ Strong Fit"
         tiers.append(JobTier(label="⚡ Strong Fit", jobs=strong_fit_jobs))
     if worth_look_jobs:
+        for j in worth_look_jobs:
+            if isinstance(j, JobPosting):
+                j.tier = "📋 Worth a Look"
+            elif isinstance(j, dict):
+                j["tier"] = "📋 Worth a Look"
         tiers.append(JobTier(label="📋 Worth a Look", jobs=worth_look_jobs))
 
     return RankedPresentation(

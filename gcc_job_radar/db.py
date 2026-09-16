@@ -338,6 +338,26 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 """,
                 (entry.config.name, entry.reason, entry.paused_at, entry.notes),
             )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS apply_prep_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id TEXT NOT NULL,
+                company TEXT NOT NULL,
+                title TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                status TEXT NOT NULL,
+                details TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        cursor.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_apply_prep_job_id ON apply_prep_attempts(job_id);
+            """
+        )
         conn.commit()
 
     # Clean up any existing duplicate entries
@@ -1088,6 +1108,12 @@ def get_applied_and_dismissed_companies(
         dismissed_companies = {row[0] for row in cursor.fetchall() if row[0]}
 
     return applied_companies, dismissed_companies
+
+
+def is_company_dismissed(company: str, db_path: Optional[Path] = None) -> bool:
+    """Check if a company is in the dismissed list or registry."""
+    _, dismissed = get_applied_and_dismissed_companies(db_path=db_path)
+    return is_company_excluded(company, dismissed)
 
 
 def is_company_excluded(company: str, excluded_companies: set[str]) -> bool:
@@ -2105,4 +2131,46 @@ def get_applied_jobs(db_path: Optional[Path] = None) -> list[dict[str, Any]]:
         )
         rows = cursor.fetchall()
     return [dict(row) for row in rows]
+
+
+def record_apply_prep_attempt(
+    job_id: Union[str, int],
+    company: str,
+    title: str,
+    provider: str,
+    status: str,
+    details: Optional[str] = None,
+    db_path: Optional[Path] = None,
+) -> int:
+    """Log an apply preparation attempt in the audit table."""
+    target_path = get_db_path(db_path)
+    init_db(target_path)
+    with sqlite3.connect(target_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO apply_prep_attempts (job_id, company, title, provider, status, details)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (str(job_id), company, title, provider, status, details),
+        )
+        conn.commit()
+        return cursor.lastrowid or 0
+
+
+def has_prepped_application(
+    job_id: Union[str, int],
+    db_path: Optional[Path] = None,
+) -> bool:
+    """Check if an application preparation has already been executed for a job."""
+    target_path = get_db_path(db_path)
+    if not target_path.exists():
+        return False
+    with sqlite3.connect(target_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT 1 FROM apply_prep_attempts WHERE job_id = ? AND status IN ('SUCCESS', 'FALLBACK') LIMIT 1",
+            (str(job_id),),
+        )
+        return cursor.fetchone() is not None
 
