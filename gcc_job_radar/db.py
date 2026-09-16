@@ -1,4 +1,7 @@
 from datetime import datetime, timezone
+import json
+import logging
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -7,9 +10,10 @@ import urllib.parse
 
 from gcc_job_radar.models import ATSProvider, JobPosting
 
-import os
+logger = logging.getLogger(__name__)
 
 DEFAULT_DB_PATH = Path(os.getenv("GCC_RADAR_DB_PATH", "gcc_jobs.db"))
+DISMISSALS_REGISTRY_PATH = Path(__file__).parent / "dismissals.json"
 
 
 def get_db_path(custom_path: Optional[Union[Path, str]] = None) -> Path:
@@ -354,11 +358,178 @@ def init_db(db_path: Optional[Path] = None) -> None:
         )
         conn.commit()
 
+    # Sync pre-configured / git-tracked dismissals across all environments on the primary database
+    if is_primary_db(db_path):
+        sync_dismissals_registry(target_path)
+
+
+def is_primary_db(db_path: Optional[Union[Path, str]] = None) -> bool:
+    """Check if the provided database path corresponds to the primary production database."""
+    if db_path is None:
+        return True
+    if os.getenv("GCC_RADAR_SYNC_DISMISSALS") == "1":
+        return True
+    try:
+        return Path(db_path).resolve() == get_db_path(DEFAULT_DB_PATH).resolve()
+    except Exception:
+        return False
+
+
+def sync_dismissals_registry(db_path: Optional[Path] = None) -> int:
+    """Sync tracked dismissals from dismissals.json into seen_jobs and dispatched_alerts."""
+    if not DISMISSALS_REGISTRY_PATH.exists():
+        return 0
+
+    target_path = get_db_path(db_path)
+    if not target_path.exists():
+        return 0
+
+    try:
+        data = json.loads(DISMISSALS_REGISTRY_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.debug("Failed to read dismissals.json: %s", exc)
+        return 0
+
+    dismissed_jobs = data.get("dismissed_jobs", [])
+    dismissed_companies = data.get("dismissed_companies", [])
+    synced_count = 0
+
+    with sqlite3.connect(target_path) as conn:
+        cursor = conn.cursor()
+
+        for j in dismissed_jobs:
+            comp = (j.get("company") or "").strip()
+            title = (j.get("title") or "").strip()
+            apply_url = canonicalize_url(j.get("apply_url") or "")
+            jid = j.get("id") or f"dismissed_{abs(hash((comp, title, apply_url)))}"
+
+            # 1. Update any existing rows matching this URL, id, or (company, title)
+            cursor.execute(
+                """
+                UPDATE seen_jobs
+                SET status = 'DISMISSED',
+                    notes = COALESCE(notes, 'Tracked dismissal')
+                WHERE (apply_url != '' AND lower(apply_url) = lower(?))
+                   OR (lower(company) = lower(?) AND lower(title) = lower(?))
+                   OR id = ?
+                """,
+                (apply_url, comp, title, jid),
+            )
+            if cursor.rowcount == 0:
+                # Insert tombstone row
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO seen_jobs (
+                        id, company, title, location, apply_url, provider,
+                        published_date, is_active, is_remote, status, notes
+                    )
+                    VALUES (?, ?, ?, 'India', ?, 'custom', 'Dismissed', 0, 0, 'DISMISSED', 'Tracked dismissal')
+                    """,
+                    (jid, comp or "Unknown", title or "Role", apply_url or "https://dismissed.local"),
+                )
+
+            # 2. Add to dispatched_alerts for both telegram and discord so it is never alerted
+            for plat in ("telegram", "discord"):
+                cursor.execute(
+                    "INSERT OR IGNORE INTO dispatched_alerts (job_id, platform, sent_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+                    (jid, plat),
+                )
+                if comp:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO dispatched_alerts (job_id, platform, sent_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+                        (f"custom_{comp.lower()}_{jid}", plat),
+                    )
+
+            synced_count += 1
+
+        for comp in dismissed_companies:
+            c_clean = comp.strip()
+            if not c_clean:
+                continue
+            cursor.execute(
+                """
+                UPDATE seen_jobs
+                SET status = 'DISMISSED'
+                WHERE lower(company) = ?
+                """,
+                (c_clean.lower(),),
+            )
+            cursor.execute(
+                "SELECT 1 FROM seen_jobs WHERE lower(company) = ? AND status = 'DISMISSED' LIMIT 1",
+                (c_clean.lower(),),
+            )
+            if not cursor.fetchone():
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO seen_jobs (
+                        id, company, title, location, apply_url, provider,
+                        published_date, is_active, is_remote, status, notes
+                    )
+                    VALUES (?, ?, 'All Roles', 'India', 'https://dismissed.local', 'custom', 'Dismissed', 0, 0, 'DISMISSED', 'Company dismissed by user')
+                    """,
+                    (f"adhoc_dismiss_{c_clean.lower()}", c_clean),
+                )
+
+        conn.commit()
+
+    return synced_count
+
+
+def save_dismissal_to_registry(
+    job_dict: Optional[dict[str, Any]] = None,
+    company_name: Optional[str] = None,
+    db_path: Optional[Union[Path, str]] = None,
+) -> None:
+    """Persist newly dismissed jobs or companies to dismissals.json if file is writable on the primary database."""
+    if not is_primary_db(db_path):
+        return
+
+    try:
+        if not DISMISSALS_REGISTRY_PATH.exists():
+            data = {"dismissed_jobs": [], "dismissed_companies": []}
+        else:
+            data = json.loads(DISMISSALS_REGISTRY_PATH.read_text(encoding="utf-8"))
+
+        changed = False
+        if job_dict:
+            clean_url = canonicalize_url(str(job_dict.get("apply_url") or ""))
+            comp = str(job_dict.get("company") or "").strip()
+            title = str(job_dict.get("title") or "").strip()
+            jid = job_dict.get("id") or job_dict.get("numeric_id")
+
+            existing = [
+                d for d in data.get("dismissed_jobs", [])
+                if (clean_url and canonicalize_url(str(d.get("apply_url") or "")).lower() == clean_url.lower())
+                or (comp and title and str(d.get("company") or "").lower() == comp.lower() and str(d.get("title") or "").lower() == title.lower())
+                or (jid and str(d.get("id")) == str(jid))
+            ]
+            if not existing:
+                data.setdefault("dismissed_jobs", []).append({
+                    "id": str(jid) if jid else None,
+                    "company": comp,
+                    "title": title,
+                    "apply_url": clean_url,
+                })
+                changed = True
+
+        if company_name:
+            c_name = company_name.strip()
+            if c_name and c_name.lower() not in [str(c).lower() for c in data.get("dismissed_companies", [])]:
+                data.setdefault("dismissed_companies", []).append(c_name)
+                changed = True
+
+        if changed:
+            DISMISSALS_REGISTRY_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.debug("Could not write to dismissals.json: %s", exc)
+
 
 def filter_unalerted_jobs(
     jobs: list[JobPosting], platform: str, db_path: Optional[Path] = None
 ) -> list[JobPosting]:
-    """Filter out jobs that have already been alerted on a specific platform."""
+    """Filter out jobs that have already been alerted on a specific platform,
+    or are marked as DISMISSED or APPLIED in seen_jobs.
+    """
     init_db(db_path)
     target_path = get_db_path(db_path)
 
@@ -366,17 +537,51 @@ def filter_unalerted_jobs(
         return []
 
     keys = [make_job_key(j) for j in jobs]
-    placeholders = ",".join("?" for _ in keys)
+    raw_ids = [str(j.id) for j in jobs]
+    id_placeholders = ",".join("?" for _ in (keys + raw_ids))
 
     with sqlite3.connect(target_path) as conn:
         cursor = conn.cursor()
         cursor.execute(
-            f"SELECT job_id FROM dispatched_alerts WHERE platform = ? AND job_id IN ({placeholders})",
-            [platform] + keys,
+            f"SELECT job_id FROM dispatched_alerts WHERE platform = ? AND job_id IN ({id_placeholders})",
+            [platform] + keys + raw_ids,
         )
         sent_ids = {row[0] for row in cursor.fetchall()}
 
-    return [j for j in jobs if make_job_key(j) not in sent_ids]
+        cursor.execute(
+            """
+            SELECT id, lower(apply_url), lower(company), lower(title), status
+            FROM seen_jobs
+            WHERE status IN ('DISMISSED', 'APPLIED')
+            """
+        )
+        suppressed_rows = cursor.fetchall()
+        suppressed_ids = {r[0] for r in suppressed_rows}
+        suppressed_urls = {r[1] for r in suppressed_rows if r[1]}
+        suppressed_semantic = {(r[2], r[3]) for r in suppressed_rows}
+
+    unalerted: list[JobPosting] = []
+    for j in jobs:
+        k = make_job_key(j)
+        raw_id = str(j.id)
+        clean_u = canonicalize_url(str(j.apply_url)).lower()
+        sem_k = (j.company.lower().strip(), j.title.lower().strip())
+        status = getattr(j, "status", "NEW").upper()
+
+        if status in ("DISMISSED", "APPLIED"):
+            continue
+        if k in sent_ids or raw_id in sent_ids:
+            continue
+        if k in suppressed_ids or raw_id in suppressed_ids:
+            continue
+        if clean_u in suppressed_urls:
+            continue
+        if sem_k in suppressed_semantic:
+            continue
+
+        unalerted.append(j)
+
+    return unalerted
 
 
 def record_dispatched_alert(
@@ -1083,8 +1288,20 @@ def mark_job_status(
                     f"UPDATE {table_name} SET status = ? WHERE rowid = ?",
                     (status_norm, target_rowid),
                 )
-
         conn.commit()
+
+
+        if status_norm == "DISMISSED":
+            jid = target_job.get("id") or str(target_rowid)
+            comp = str(target_job.get("company") or "")
+            prov = str(target_job.get("provider") or "")
+            record_dispatched_alert(jid, "telegram", db_path=db_path)
+            record_dispatched_alert(jid, "discord", db_path=db_path)
+            if comp and prov:
+                record_dispatched_alert(f"{prov}_{comp.lower()}_{jid}", "telegram", db_path=db_path)
+                record_dispatched_alert(f"{prov}_{comp.lower()}_{jid}", "discord", db_path=db_path)
+            save_dismissal_to_registry(job_dict=target_job, db_path=db_path)
+
         return cursor.rowcount > 0
 
 
@@ -1587,6 +1804,11 @@ def dismiss_selectors_or_companies(
                     })
                     dismissed_companies.add(comp_display)
 
+    for jd in dismissed_jobs:
+        save_dismissal_to_registry(job_dict=jd, db_path=db_path)
+    for adh in dismissed_adhoc:
+        save_dismissal_to_registry(company_name=adh.get("company"), db_path=db_path)
+
     return {
         "status": "success",
         "dismissed_jobs": dismissed_jobs,
@@ -1595,6 +1817,7 @@ def dismiss_selectors_or_companies(
         "total_jobs": len(dismissed_jobs),
         "total_adhoc": len(dismissed_adhoc),
     }
+
 
 
 def is_email_seen(

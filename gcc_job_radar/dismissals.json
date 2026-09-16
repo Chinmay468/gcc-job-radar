@@ -1,0 +1,47 @@
+{
+  "dismissed_jobs": [
+    {
+      "id": "custom_katalon_af9103e5f0",
+      "company": "Katalon",
+      "title": "AI Application Engineering Intern",
+      "apply_url": "https://careers.katalon.com/jobs/8186184-ai-application-engineering-intern"
+    },
+    {
+      "id": "custom_gallagher_59751f2c84",
+      "company": "Gallagher",
+      "title": "Junior Test Analyst",
+      "apply_url": "https://careers.gallagher.com/jobs/8369837-junior-test-analyst"
+    },
+    {
+      "company": "Wysa",
+      "title": "Junior Backend Developer",
+      "apply_url": "https://uploads.strikinglycdn.com/files/bf0e5e6e-96bb-4012-b079-8ebb0f7757cd/JD-Wysa_Junior+Fullstack+developer+role+%5BAugust%5D.pdf"
+    },
+    {
+      "company": "Wysa",
+      "title": "Associate Full Stack Engineer",
+      "apply_url": "https://uploads.strikinglycdn.com/files/6dad206c-8424-45de-8b6c-bbb09703e602/Wysa_Associate+Full+Stack+Engineer+Role+%5BJuly%5D+.pdf"
+    },
+    {
+      "company": "TalentSprint",
+      "title": "Early career professionals",
+      "apply_url": "https://talentsprint.com/in-en/careers/life-at-accenture/entry-level"
+    },
+    {
+      "company": "Scalable Capital",
+      "title": "Explore our Early Career Programs",
+      "apply_url": "https://scalablecapital.com/en/careers/young-professionals"
+    },
+    {
+      "company": "Palo Alto Networks",
+      "title": "Search Internships and New Grad Jobs",
+      "apply_url": "https://paloaltonetworks.com/early-in-career"
+    },
+    {
+      "company": "Palo Alto Networks",
+      "title": "Explore Cybersecurity Careers and Jobs at Palo Alto Networks India",
+      "apply_url": "https://paloaltonetworks.com/en/india"
+    }
+  ],
+  "dismissed_companies": []
+}

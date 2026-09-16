@@ -185,3 +185,58 @@ async def test_custom_career_turbohire_strict_entry_level_filtering():
         assert not any("CA Intern" in t for t in titles)
         assert not any("Architect" in t for t in titles)
 
+
+@pytest.mark.asyncio
+async def test_custom_career_filters_landing_pages_pdfs_and_generates_deterministic_ids():
+    """Verify that landing pages, PDF downloads, and search CTAs are rejected, and IDs are deterministic."""
+    html_with_landing_pages = """
+    <!DOCTYPE html>
+    <html>
+    <body>
+        <!-- Portal navigation & search CTAs matching positive title keywords (MUST be rejected) -->
+        <a href="/early-in-career">Search Internships and New Grad Jobs</a>
+        <a href="/en/careers/young-professionals">Explore our Early Career Programs</a>
+        <a href="/in-en/careers/life-at-accenture/entry-level">Early career professionals</a>
+        <a href="/en/india">Explore Cybersecurity Careers and Jobs at Palo Alto Networks India</a>
+        
+        <!-- Static PDF flyers (MUST be rejected) -->
+        <a href="https://uploads.strikinglycdn.com/files/123/JD-Wysa_Junior+Fullstack.pdf">Junior Backend Developer</a>
+        <a href="/files/Associate_Full_Stack_Engineer.pdf">Associate Full Stack Engineer</a>
+
+        <!-- Legitimate job listings (MUST be extracted) -->
+        <a href="/jobs/8186184-ai-application-engineering-intern">AI Application Engineering Intern</a>
+        <a href="/jobs/8369837-junior-test-analyst">Junior Test Analyst</a>
+    </body>
+    </html>
+    """
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=html_with_landing_pages, headers={"content-type": "text/html"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CustomCareerClient(http_client)
+        postings = await client.fetch_jobs("TestCompany", "https://testcompany.com/careers")
+
+        # Only the 2 legitimate postings must be kept
+        assert len(postings) == 2
+        titles = [p.title for p in postings]
+        assert "AI Application Engineering Intern" in titles
+        assert "Junior Test Analyst" in titles
+
+        # Verify all landing page and PDF titles rejected
+        assert "Search Internships and New Grad Jobs" not in titles
+        assert "Explore our Early Career Programs" not in titles
+        assert "Early career professionals" not in titles
+        assert "Explore Cybersecurity Careers and Jobs at Palo Alto Networks India" not in titles
+        assert not any("Strikingly" in str(p.apply_url) for p in postings)
+        assert not any(str(p.apply_url).endswith(".pdf") for p in postings)
+
+        # Verify deterministic IDs
+        first_run_ids = [p.id for p in postings]
+        postings_run_2 = await client.fetch_jobs("TestCompany", "https://testcompany.com/careers")
+        second_run_ids = [p.id for p in postings_run_2]
+        assert first_run_ids == second_run_ids
+        for jid in first_run_ids:
+            assert jid.startswith("custom_testcompany_")
+
+

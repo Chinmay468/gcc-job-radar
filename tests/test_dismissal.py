@@ -209,3 +209,65 @@ async def test_dismiss_role_does_not_block_future_roles(temp_db: Path) -> None:
         assert len(dispatched_jobs) == 1
         assert dispatched_jobs[0].company == "Wysa"
 
+
+@pytest.mark.asyncio
+async def test_sync_dismissals_registry_and_filter_unalerted(temp_db: Path) -> None:
+    """Verify sync_dismissals_registry correctly suppresses offending openings across all platforms."""
+    from gcc_job_radar.db import filter_unalerted_jobs, sync_dismissals_registry
+    from gcc_job_radar.notifier import dispatch_notifications
+
+    # 1. Run sync_dismissals_registry on a fresh database
+    count = sync_dismissals_registry(temp_db)
+    assert count >= 8
+
+    # 2. Re-create the offending Katalon and Gallagher postings
+    katalon_role = JobPosting(
+        id="custom_katalon_af9103e5f0",
+        company="Katalon",
+        title="AI Application Engineering Intern",
+        location="India",
+        apply_url="https://careers.katalon.com/jobs/8186184-ai-application-engineering-intern",
+        provider=ATSProvider.CUSTOM,
+    )
+    gallagher_role = JobPosting(
+        id="custom_gallagher_59751f2c84",
+        company="Gallagher",
+        title="Junior Test Analyst",
+        location="India",
+        apply_url="https://careers.gallagher.com/jobs/8369837-junior-test-analyst",
+        provider=ATSProvider.CUSTOM,
+    )
+    # A new, legitimate role from Katalon that was NOT dismissed
+    katalon_new_role = JobPosting(
+        id="custom_katalon_new_12345",
+        company="Katalon",
+        title="Junior Backend Developer",
+        location="India",
+        apply_url="https://careers.katalon.com/jobs/999999-junior-backend-developer",
+        provider=ATSProvider.CUSTOM,
+    )
+
+    # 3. filter_unalerted_jobs must discard the dismissed roles and keep only the new role
+    unalerted_tg = filter_unalerted_jobs([katalon_role, gallagher_role, katalon_new_role], "telegram", db_path=temp_db)
+    assert len(unalerted_tg) == 1
+    assert unalerted_tg[0].id == "custom_katalon_new_12345"
+
+    unalerted_dc = filter_unalerted_jobs([katalon_role, gallagher_role, katalon_new_role], "discord", db_path=temp_db)
+    assert len(unalerted_dc) == 1
+    assert unalerted_dc[0].id == "custom_katalon_new_12345"
+
+    # 4. In dispatch_notifications, only the new role is sent
+    with patch("gcc_job_radar.notifier.send_telegram_notification", new_callable=AsyncMock) as mock_send_tg:
+        mock_send_tg.return_value = True
+        await dispatch_notifications(
+            new_jobs=[katalon_role, gallagher_role, katalon_new_role],
+            telegram_token="dummy_token",
+            telegram_chat_id="12345",
+            db_path=temp_db,
+        )
+        assert mock_send_tg.called
+        dispatched_jobs = mock_send_tg.call_args[0][2]
+        assert len(dispatched_jobs) == 1
+        assert dispatched_jobs[0].title == "Junior Backend Developer"
+
+

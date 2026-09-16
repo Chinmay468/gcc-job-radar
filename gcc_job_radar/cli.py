@@ -327,6 +327,9 @@ def scan(
 
     new_jobs, existing_jobs = filter_new_jobs(all_jobs, db_path)
 
+    # Persist all current active jobs (attaches rowid, numeric_id, status, notes to all_jobs)
+    record_jobs(all_jobs, db_path)
+
     # Check for unalerted active postings (handles new jobs as well as retrying any failed prior dispatches)
     unalerted_jobs = []
     if notify_discord or os.getenv("DISCORD_WEBHOOK_URL"):
@@ -351,9 +354,6 @@ def scan(
                 digest=digest,
             )
         )
-
-    # Persist all current active jobs (attaches rowid, status, notes to all_jobs)
-    record_jobs(all_jobs, db_path)
 
     if show_all:
         display_jobs = all_jobs

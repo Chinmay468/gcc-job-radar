@@ -31,6 +31,9 @@ gcc-job-radar = "gcc_job_radar.cli:app"
 where = ["."]
 include = ["gcc_job_radar*"]
 
+[tool.setuptools.package-data]
+gcc_job_radar = ["*.json"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

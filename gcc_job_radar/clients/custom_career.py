@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import re
@@ -10,6 +11,7 @@ import httpx
 from pydantic import ValidationError
 
 from gcc_job_radar.clients.base import BaseATSClient, DEFAULT_TIMEOUT
+from gcc_job_radar.db import canonicalize_url
 from gcc_job_radar.filters import is_remote_opening, matches_india_location, matches_target_title
 from gcc_job_radar.models import ATSProvider, CompanyConfig, JobPosting
 
@@ -41,6 +43,58 @@ NON_TECH_EXCLUDE_PATTERN = re.compile(
     r"finance|accountant|driver|technician|cook|chef)\b",
     re.IGNORECASE,
 )
+
+# Generic career portal directories, sections, and landing page URLs that are NOT individual jobs
+DISQUALIFIED_PATH_PATTERN = re.compile(
+    r"""(?ix)
+    /(?:
+        early-in-career |
+        young-professionals |
+        entry-level |
+        life-at[\w-]* |
+        our-culture |
+        culture |
+        programs? |
+        students? |
+        university-recruiting |
+        campus |
+        locations? |
+        about[\w-]* |
+        benefits |
+        working-at[\w-]* |
+        overview |
+        en/(?:india|us|uk|de|apac) |
+        india
+    )(?:/|\.html?)?$
+    """,
+    re.VERBOSE,
+)
+
+# Call-to-action or navigational link text that indicates a portal/category link, not a job role
+DISQUALIFIED_TEXT_PATTERN = re.compile(
+    r"""(?ix)
+    \b(?:
+        explore(?:\s+our)? |
+        search\s+(?:internships|jobs|roles|openings|careers) |
+        find\s+(?:jobs|roles|careers) |
+        view\s+all |
+        see\s+all |
+        our\s+programs? |
+        early\s+career\s+programs? |
+        programs?\s+overview |
+        life\s+at |
+        working\s+at |
+        meet\s+the\s+team |
+        who\s+we\s+are |
+        why\s+join\s+us |
+        join\s+our\s+talent\s+community |
+        talent\s+network |
+        talent\s+pool
+    )\b
+    """,
+    re.VERBOSE,
+)
+
 
 
 def clean_company_slug(name: str) -> str:
@@ -110,6 +164,10 @@ class CustomCareerClient(BaseATSClient):
                 if not matches_target_title(text):
                     continue
 
+                # Disqualify portal navigational links and search CTAs (e.g. "Explore our programs", "Search Internships")
+                if DISQUALIFIED_TEXT_PATTERN.search(text):
+                    continue
+
                 full_url = urljoin(target_url, href)
                 url_lower = full_url.lower()
 
@@ -119,8 +177,13 @@ class CustomCareerClient(BaseATSClient):
                     "hostinger.com", "porkbun.com", "godaddy.com", "namecheap.com",
                     "twitter.com", "x.com", "facebook.com", "instagram.com", "youtube.com",
                     "gartner.com", "forrester.com", "trustradius.com", "g2.com",
+                    "strikinglycdn.com",
                 )
                 if any(d in url_lower for d in disqualified_domains):
+                    continue
+
+                # Disqualify static document downloads (.pdf flyers, word docs, presentations)
+                if any(url_lower.split("?")[0].endswith(ext) for ext in (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".ppt", ".pptx")):
                     continue
 
                 disqualified_paths = (
@@ -131,12 +194,17 @@ class CustomCareerClient(BaseATSClient):
                 if any(p in url_lower for p in disqualified_paths):
                     continue
 
-                if full_url in seen_urls:
+                parsed_path = urllib.parse.urlparse(full_url).path
+                if DISQUALIFIED_PATH_PATTERN.search(parsed_path):
                     continue
-                seen_urls.add(full_url)
 
-                # Deterministic unique ID
-                job_hash = abs(hash(full_url)) % 10000000
+                clean_url = canonicalize_url(full_url)
+                if clean_url in seen_urls:
+                    continue
+                seen_urls.add(clean_url)
+
+                # Deterministic unique ID derived from SHA256 of canonical URL
+                job_hash = hashlib.sha256(clean_url.encode("utf-8")).hexdigest()[:10]
                 job_id = f"custom_{clean_slug}_{job_hash}"
 
                 try:
@@ -145,7 +213,7 @@ class CustomCareerClient(BaseATSClient):
                         company=company_name,
                         title=text,
                         location="India",
-                        apply_url=full_url,
+                        apply_url=clean_url,
                         published_date="Recent",
                         provider=ATSProvider.CUSTOM,
                         is_remote=False,

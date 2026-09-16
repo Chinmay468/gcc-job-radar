@@ -205,10 +205,11 @@ def test_cli_provider_filter_workday(tmp_path: Path) -> None:
     with patch("gcc_job_radar.cli.scan_all_companies", side_effect=mock_scan):
         result = runner.invoke(app, ["scan", "--provider", "workday", "--db", str(db_file)])
         assert result.exit_code == 0
-        assert len(captured_companies) == 61
+        assert len(captured_companies) == 62
         assert all(c.provider == ATSProvider.WORKDAY for c in captured_companies)
         assert "WORKDAY" in result.output
-        assert "61" in result.output
+        assert "62" in result.output
+
 
 
 def test_cli_provider_filter_invalid() -> None:

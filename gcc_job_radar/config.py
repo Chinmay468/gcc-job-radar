@@ -5513,8 +5513,8 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="Nord Security", provider=ATSProvider.ASHBY, board_token="nord-security"),
     CompanyConfig(name="Oxylabs", provider=ATSProvider.LEVER, board_token="oxylabs"),
     CompanyConfig(name="Katalon", provider=ATSProvider.CUSTOM, board_token="katalonhq", career_url="https://careers.katalon.com"),
-    CompanyConfig(name="Palo Alto Networks", provider=ATSProvider.CUSTOM, board_token="paloaltonetworks", career_url="https://paloaltonetworks.com/careers"),
-    CompanyConfig(name="Scalable Capital", provider=ATSProvider.CUSTOM, board_token="scalablecapital", career_url="https://scalablecapital.com/careers"),
+    CompanyConfig(name="Palo Alto Networks", provider=ATSProvider.WORKDAY, board_token="paloaltonetworks.wd5.myworkdayjobs.com/panwexternalcareers"),
+    CompanyConfig(name="Scalable Capital", provider=ATSProvider.SMARTRECRUITERS, board_token="ScalableGmbH"),
     CompanyConfig(name="SpotMe", provider=ATSProvider.GREENHOUSE, board_token="spotme"),
     CompanyConfig(name="cargo.one", provider=ATSProvider.ASHBY, board_token="cargo-one"),
     CompanyConfig(name="saas.group", provider=ATSProvider.GREENHOUSE, board_token="saasgroup"),
@@ -5533,8 +5533,6 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="Browserbase", provider=ATSProvider.ASHBY, board_token="browserbase"),
     CompanyConfig(name="Gallagher", provider=ATSProvider.CUSTOM, board_token="gallagherhq", career_url="https://careers.gallagher.com"),
     CompanyConfig(name="CloudSEK", provider=ATSProvider.GREENHOUSE, board_token="cloudsek"),
-    CompanyConfig(name="Wysa", provider=ATSProvider.CUSTOM, board_token="wysa", career_url="https://wysa.com/careers"),
-    CompanyConfig(name="TalentSprint", provider=ATSProvider.CUSTOM, board_token="talentsprint", career_url="https://talentsprint.com/careers"),
 ]
 
 # Strict entry-level tech title positive pattern
