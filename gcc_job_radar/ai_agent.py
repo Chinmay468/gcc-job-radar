@@ -34,6 +34,7 @@ from gcc_job_radar.db import (
     record_manual_job,
 )
 from gcc_job_radar.link_resolver import resolve_effective_apply_url
+from gcc_job_radar.presentation import build_ranked_presentation, format_jobs_html
 from gcc_job_radar.scanner import scan_all_companies
 
 logger = logging.getLogger(__name__)
@@ -100,14 +101,23 @@ SYSTEM_PROMPT = (
     "- WHEN THE USER ASKS HOW MANY COMPANIES WE SCRAPE DIRECTLY FROM CAREER PAGES (OR NOT ON ANY ATS BOARD LIKE FLIPKART, APPLE, ETC.):\n"
     "  • Answer clearly: Exactly 6 companies have dedicated custom career portal scrapers (Flipkart, Apple, Amazon, Microsoft, EA, Majid Al Futtaim).\n"
     "  • NEVER answer 5,313 when asked about custom scrapers or non-ATS boards! 5,313 is the total count across ALL sources (5,307 standard ATS + 6 custom).\n\n"
-    "CRITICAL FORMATTING GUIDELINES FOR TELEGRAM (JOB LISTINGS):\n"
+    "CRITICAL FORMATTING GUIDELINES FOR TELEGRAM (JOB LISTINGS & RECOMMENDATIONS):\n"
     "- NEVER use markdown tables (no '| ... |' format). Telegram cannot render tables and they look broken and unreadable on mobile screens.\n"
-    "- When presenting jobs, ALWAYS present each job as a clean, structured card with emojis and markdown links:\n"
-    "  🏢 **Company Name**\n"
-    "  💼 Job Title\n"
-    "  📍 Location • 📅 Posted Date\n"
-    "  🔗 [Apply on ATS](apply_url)\n"
-    "- If multiple jobs are found, separate each job card with a blank line.\n\n"
+    "- Present job listings as a clean, structured RANKED RECOMMENDATION, not a flat data dump:\n"
+    "  1. ONE-LINE LEAD-IN: Always begin with a concise one-line lead-in summarizing the total roles and count of strong stack fits (e.g. 'Found 6 new roles, 2 are strong fits for your stack.' or 'Found 3 verified entry-level roles.'). Absolutely NO throat-clearing intro sentences ('Sure, here are the jobs I found', 'I found the following listings:').\n"
+    "  2. TOP PICK(S) CALLED OUT FIRST: Order jobs by relevance_score descending. Feature top pick(s) under ⭐ **Best Fit** (roles with score ≥ 40, or top 1-2 with score ≥ 25).\n"
+    "  3. ONE-LINE 'WHY' UNDERNEATH EACH JOB: Include a concrete rationale line (💡 *Why: ...*) underneath each job card using the factual `why` or `matched_reasons` provided in the tool output (e.g. 'Matches Spring Boot + Kafka • Core target stack'). NEVER fabricate reasons.\n"
+    "  4. TIERED GROUPING:\n"
+    "     • ⭐ **Best Fit:** (highest score roles, core tech matches)\n"
+    "     • ⚡ **Strong Fit:** (good stack match, score 20–39)\n"
+    "     • 📋 **Worth a Look:** (adjacent skills, general tech, or score < 20)\n"
+    "  5. TAIL SUMMARY FOR LONG LISTS: When there are more than 5 results, display the top 4–5 cards in full detail, then append a tail summary naming the omitted companies (e.g. '➕ **+3 more roles at Snowflake, Databricks** — reply `/latest all` or search by company to view'). NEVER silently drop jobs!\n"
+    "  6. JOB CARD STRUCTURE:\n"
+    "     **1. Company Name**\n"
+    "     💼 Job Title\n"
+    "     📍 Location • 📅 Posted Date\n"
+    "     🔗 [Apply on ATS](apply_url)\n"
+    "     💡 *Why: Matches Spring Boot + Kafka • Core target stack*\n\n"
     "GENERAL RESPONSE FORMATTING RULES (FOR ALL NON-JOB-LISTING ANSWERS):\n"
     "- Default to structured markdown: short headers (### or **Header**), bullet points, and numbered lists for steps or priorities.\n"
     "- Break any answer longer than ~3 sentences into bullets or short labeled sections instead of one paragraph. NEVER output a wall of text or a dense continuous paragraph.\n"
@@ -161,7 +171,50 @@ SYSTEM_PROMPT = (
     "• **SmartRecruiters** — 999 companies\n"
     "• **Lever** — 704 companies\n"
     "• **Workday** — 61 companies\n\n"
-    "**Total Tracked Companies:** 5,313"
+    "**Total Tracked Companies:** 5,313\n\n"
+    "FEW-SHOT EXAMPLES FOR JOB SEARCH & RECOMMENDATION QUERIES:\n\n"
+    "User: find java roles in bangalore\n"
+    "Assistant:\n"
+    "Found 3 new roles, 2 are strong fits for your stack.\n\n"
+    "⭐ **Best Fit:**\n\n"
+    "**1. Databricks**\n"
+    "💼 Associate Software Engineer (Backend)\n"
+    "📍 Bengaluru • 📅 Active\n"
+    "🔗 [Apply on Greenhouse](https://job-boards.greenhouse.io/databricks/jobs/101)\n"
+    "💡 *Matches Java + Spring Boot • Core target stack*\n\n"
+    "⚡ **Strong Fit:**\n\n"
+    "**2. Snowflake**\n"
+    "💼 Software Engineer I\n"
+    "📍 Bengaluru • 📅 2026-09-12\n"
+    "🔗 [Apply on Ashby](https://jobs.ashbyhq.com/snowflake/jobs/102)\n"
+    "💡 *Matches Java + Docker • Target stack*\n\n"
+    "📋 **Worth a Look:**\n\n"
+    "**3. BT Group**\n"
+    "💼 Graduate Software Engineer\n"
+    "📍 Bengaluru • 📅 Active\n"
+    "🔗 [Apply on Workday](https://bt.wd3.myworkdayjobs.com/bt/job/103)\n"
+    "💡 *Good match for entry-level tech role*\n\n"
+    "User: check recent jobs at flipkart, stripe, and celonis\n"
+    "Assistant:\n"
+    "Found 3 verified entry-level roles across target GCCs.\n\n"
+    "⭐ **Best Fit:**\n\n"
+    "**1. Flipkart**\n"
+    "💼 SDE-1 (Java / Backend)\n"
+    "📍 Bengaluru • 📅 Active\n"
+    "🔗 [Apply on Flipkart Careers](https://www.flipkartcareers.com/job/301)\n"
+    "💡 *Matches Java + MySQL • Core target stack*\n\n"
+    "⚡ **Strong Fit:**\n\n"
+    "**2. Celonis**\n"
+    "💼 Associate Software Development Engineer\n"
+    "📍 Bengaluru • 📅 Active\n"
+    "🔗 [Apply on Greenhouse](https://job-boards.greenhouse.io/celonis/jobs/201)\n"
+    "💡 *Matches REST/Microservices + MySQL • Target stack*\n\n"
+    "📋 **Worth a Look:**\n\n"
+    "**3. Stripe**\n"
+    "💼 Technical Support Engineer - New Grad\n"
+    "📍 Bengaluru • 📅 2026-09-10\n"
+    "🔗 [Apply on Greenhouse](https://job-boards.greenhouse.io/stripe/jobs/202)\n"
+    "💡 *Verified entry-level opening • 0-2 YOE*"
 )
 
 
@@ -595,6 +648,19 @@ async def execute_tool(
         compact_jobs = []
         for j in jobs:
             eff_url, _, _ = resolve_effective_apply_url(j)
+            score = j.get("relevance_score") or 0
+            why = j.get("why")
+            reasons = j.get("matched_reasons") or []
+            if not why:
+                from gcc_job_radar.relevance import evaluate_job_relevance
+                calc_score, reasons, why = evaluate_job_relevance(
+                    title=j.get("title", ""),
+                    description=j.get("description", "") or j.get("notes", ""),
+                    published_date=j.get("published_date"),
+                    is_remote=bool(j.get("is_remote")),
+                )
+                if not score:
+                    score = calc_score
             compact_jobs.append({
                 "id": j.get("numeric_id") or j.get("id"),
                 "company": j.get("company", "Unknown"),
@@ -602,6 +668,9 @@ async def execute_tool(
                 "location": j.get("location", ""),
                 "apply_url": eff_url or j.get("apply_url") or "",
                 "published_date": str(j.get("published_date") or "Active")[:10],
+                "relevance_score": score,
+                "matched_reasons": reasons,
+                "why": why,
             })
         return {
             "status": "success",
@@ -1147,28 +1216,6 @@ def markdown_to_telegram_html(text: str) -> str:
     return sanitize_telegram_html(raw_html)
 
 
-
-def format_jobs_html(jobs: list[dict[str, Any]], title: str) -> str:
-    """Format job listings into Telegram HTML."""
-    if not jobs:
-        return f"ℹ️ <b>{html.escape(title)}</b>\n\nNo matching entry-level roles found."
-
-    count_suffix = "" if f"({len(jobs)})" in title else f" ({len(jobs)})"
-    msg = f"🚀 <b>{html.escape(title)}{count_suffix}</b>\n\n"
-    for idx, item in enumerate(jobs, start=1):
-        company = item.get("company", "")
-        pos_title = item.get("title", "")
-        location = item.get("location", "")
-        date = item.get("published_date") or "Active"
-        url = item.get("apply_url", "")
-
-        msg += (
-            f"<b>{idx}. {html.escape(company)}</b>\n"
-            f"💼 {html.escape(pos_title)}\n"
-            f"📍 {html.escape(location)} • 📅 {html.escape(date)}\n"
-            f'🔗 <a href="{url}">Apply on ATS</a>\n\n'
-        )
-    return msg.strip()
 
 
 def format_tool_result_summary(name: str, result: dict[str, Any]) -> str:

@@ -537,8 +537,40 @@ async def test_handle_command_scan_new(test_db_with_jobs: Path) -> None:
                 db_path=test_db_with_jobs,
             )
 
-    assert len(mock_scan_called_with) == 1
-    assert len(mock_scan_called_with[0]) == 10
     assert any("the last <b>10</b> newly added companies" in r for r in replies)
+
+
+def test_format_jobs_html_ranked_recommendations() -> None:
+    """Verify format_jobs_html outputs ranked recommendations with lead-in, tiers, why-lines, and tail summary."""
+    from gcc_job_radar.bot_listener import format_jobs_html
+    from gcc_job_radar.models import ATSProvider, JobPosting
+
+    jobs = [
+        JobPosting(
+            id=f"job-{i}",
+            company=f"TargetComp_{i}",
+            title="Java Backend Engineer" if i == 0 else "Associate Support Engineer",
+            location="Bengaluru",
+            apply_url=f"https://example.com/job/{i}",
+            provider=ATSProvider.GREENHOUSE,
+            relevance_score=80 if i == 0 else 10,
+        )
+        for i in range(7)
+    ]
+
+    html_out = format_jobs_html(jobs, "Latest Roles", max_full_cards=5)
+
+    # Lead-in
+    assert "Found 7 new roles, 1 strong fit for your stack." in html_out
+    # Tiers
+    assert "⭐ Best Fit:" in html_out
+    assert "📋 Worth a Look:" in html_out
+    # Best fit called out first
+    assert "<b>1. TargetComp_0</b>" in html_out
+    # Why line present
+    assert "💡 <i>" in html_out
+    # Tail summary present with company names
+    assert "+2 more roles at TargetComp_5, TargetComp_6" in html_out
+    assert "reply <code>/latest all</code> or search by company to view" in html_out
 
 

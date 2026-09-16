@@ -9,6 +9,8 @@ from rich.console import Console
 
 from gcc_job_radar.link_resolver import resolve_effective_apply_url
 from gcc_job_radar.models import JobPosting
+from gcc_job_radar.presentation import build_ranked_presentation, format_jobs_html
+from gcc_job_radar.relevance import score_job_posting
 from gcc_job_radar.resume_tailor_bridge import tailor_resume_for_job
 
 logger = logging.getLogger(__name__)
@@ -45,16 +47,22 @@ async def send_discord_notification(
                     {"name": "📍 Location", "value": job.location, "inline": True},
                     {"name": "📡 Source", "value": job.provider.value.upper(), "inline": True},
                     {"name": "📅 Date", "value": job.published_date or "Active", "inline": True},
-                    {
-                        "name": "🔗 Apply Link",
-                        "value": f"[{label}]({effective_url})",
-                        "inline": False,
-                    },
                 ],
                 "footer": {
                     "text": "GCC Job Radar • India Tech Tracker"
                 },
             }
+            if getattr(job, "why", None):
+                embed["fields"].append({
+                    "name": "💡 Why",
+                    "value": str(job.why),
+                    "inline": False,
+                })
+            embed["fields"].append({
+                "name": "🔗 Apply Link",
+                "value": f"[{label}]({effective_url})",
+                "inline": False,
+            })
             if getattr(job, "tailored_tex_path", None):
                 res_val = f"`{job.tailored_tex_path}`"
                 if getattr(job, "tailored_pdf_path", None):
@@ -147,6 +155,12 @@ def format_job_card_html(job: JobPosting | dict[str, Any]) -> str:
     )
     tex_path = getattr(job, "tailored_tex_path", None) if isinstance(job, JobPosting) else (job.get("tailored_tex_path") if isinstance(job, dict) else None)
     pdf_path = getattr(job, "tailored_pdf_path", None) if isinstance(job, JobPosting) else (job.get("tailored_pdf_path") if isinstance(job, dict) else None)
+    why_text = getattr(job, "why", None) if isinstance(job, JobPosting) else (job.get("why") if isinstance(job, dict) else None)
+    if not why_text:
+        score_job_posting(job)
+        why_text = getattr(job, "why", None) if isinstance(job, JobPosting) else (job.get("why") if isinstance(job, dict) else None)
+    if why_text:
+        card += f"\n💡 <i>{html.escape(str(why_text))}</i>"
     if tex_path:
         pdf_note = f" (PDF: <code>{html.escape(str(pdf_path))}</code>)" if pdf_path else ""
         card += f"\n📄 <b>Tailored Resume:</b> <code>{html.escape(str(tex_path))}</code>{pdf_note}"
@@ -200,49 +214,38 @@ async def send_telegram_notification(
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     success = True
 
-    # Build HTML formatted text
-    header = f"🚀 <b>New GCC Entry-Level Opening(s) Detected ({len(new_jobs)})!</b>\n\n"
-    items_text = []
-
-    for idx, job in enumerate(new_jobs, start=1):
-        clean_company = html.escape(job.company)
-        clean_title = html.escape(job.title)
-        clean_location = html.escape(job.location)
-        effective_url, _, label = resolve_effective_apply_url(job)
-
-        item = (
-            f"<b>{idx}. {clean_company}</b>\n"
-            f"💼 {clean_title}\n"
-            f"📍 {clean_location} ({job.provider.value.upper()})\n"
-            f"🔗 <a href=\"{html.escape(effective_url)}\">{html.escape(label)}</a>\n"
-        )
-        if getattr(job, "tailored_tex_path", None):
-            pdf_note = f" (PDF: <code>{html.escape(str(job.tailored_pdf_path))}</code>)" if getattr(job, "tailored_pdf_path", None) else ""
-            item += f"📄 <b>Resume:</b> <code>{html.escape(str(job.tailored_tex_path))}</code>{pdf_note}\n"
-        items_text.append(item)
+    # Use shared presentation engine
+    presentation = build_ranked_presentation(new_jobs, max_full_cards=6)
+    full_text = format_jobs_html(
+        new_jobs,
+        title="New GCC Entry-Level Opening(s) Detected",
+        max_full_cards=6,
+    )
 
     # Telegram messages are limited to 4096 characters, chunk if needed
     message_chunks = []
-    current_chunk = header
+    if len(full_text) <= 3800:
+        message_chunks.append(full_text)
+    else:
+        current_chunk = ""
+        for block in full_text.split("\n\n"):
+            if len(current_chunk) + len(block) + 2 > 3800:
+                if current_chunk:
+                    message_chunks.append(current_chunk.strip())
+                current_chunk = block + "\n\n"
+            else:
+                current_chunk += block + "\n\n"
+        if current_chunk.strip():
+            message_chunks.append(current_chunk.strip())
 
-    for item in items_text:
-        if len(current_chunk) + len(item) > 3800:
-            message_chunks.append(current_chunk)
-            current_chunk = item + "\n"
-        else:
-            current_chunk += item + "\n"
-
-    if current_chunk:
-        message_chunks.append(current_chunk)
-
-    # Build interactive inline keyboard
+    # Build interactive inline keyboard for displayed jobs
+    displayed_jobs = [j for tier in presentation.tiers for j in tier.jobs]
     reply_markup: Optional[dict[str, Any]] = None
-    if len(new_jobs) == 1:
-        reply_markup = build_job_inline_keyboard(new_jobs[0])
-    elif len(new_jobs) <= 8:
-        # Multi-job compact inline keyboard
+    if len(displayed_jobs) == 1:
+        reply_markup = build_job_inline_keyboard(displayed_jobs[0])
+    elif len(displayed_jobs) <= 8:
         keyboard_rows = []
-        for idx, job in enumerate(new_jobs, start=1):
+        for idx, job in enumerate(displayed_jobs, start=1):
             job_id = job.numeric_id if job.numeric_id is not None else job.id
             effective_url, _, _ = resolve_effective_apply_url(job)
             apply_url = str(effective_url) if effective_url else str(job.apply_url)
@@ -323,7 +326,11 @@ async def send_discord_digest(
             score = getattr(j, "relevance_score", 0) or 0
             eff_url, _, label = resolve_effective_apply_url(j)
             score_prefix = f"`[{score} pts]` " if score > 0 else ""
-            lines.append(f"• {score_prefix}[{j.title}]({eff_url}) — *{j.location}*")
+            line = f"• {score_prefix}[{j.title}]({eff_url}) — *{j.location}*"
+            why_text = getattr(j, "why", None)
+            if score >= 20 and why_text:
+                line += f"\n  💡 *{why_text}*"
+            lines.append(line)
 
         field_value = "\n".join(lines)
         if len(field_value) > 1024:
@@ -381,7 +388,12 @@ async def send_telegram_digest(
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     grouped = group_jobs_by_company(jobs)
 
-    header = f"📬 <b>GCC Job Radar — Daily Digest ({len(jobs)} openings)</b>\n\n"
+    presentation = build_ranked_presentation(jobs, max_full_cards=len(jobs))
+    strong_suffix = f" ({presentation.strong_count} top picks)" if presentation.strong_count > 0 else ""
+    header = (
+        f"📬 <b>GCC Job Radar — Daily Digest ({len(jobs)} openings{strong_suffix})</b>\n\n"
+        f"{presentation.lead_in}\n\n"
+    )
     company_blocks = []
 
     for comp, comp_jobs in grouped:
@@ -390,9 +402,11 @@ async def send_telegram_digest(
             score = getattr(j, "relevance_score", 0) or 0
             score_badge = f"<code>[{score} pts]</code> " if score > 0 else ""
             eff_url, _, _ = resolve_effective_apply_url(j)
-            comp_lines.append(
-                f"  • {score_badge}<a href=\"{html.escape(str(eff_url))}\">{html.escape(j.title)}</a> — <i>{html.escape(j.location)}</i>"
-            )
+            why_text = getattr(j, "why", None)
+            line = f"  • {score_badge}<a href=\"{html.escape(str(eff_url))}\">{html.escape(j.title)}</a> — <i>{html.escape(j.location)}</i>"
+            if score >= 20 and why_text:
+                line += f"\n    💡 <i>{html.escape(why_text)}</i>"
+            comp_lines.append(line)
         company_blocks.append("\n".join(comp_lines))
 
     chunks = []
@@ -448,6 +462,12 @@ async def dispatch_notifications(
     ]
     if not new_jobs:
         return
+
+    # Ensure all jobs have relevance scores and deterministic why rationale, sorted highest first
+    for j in new_jobs:
+        if not getattr(j, "relevance_score", None) or not getattr(j, "why", None):
+            score_job_posting(j)
+    new_jobs.sort(key=lambda j: (getattr(j, "relevance_score", 0) or 0), reverse=True)
 
     # Fallback to environment variables
     discord_url = (discord_webhook or os.getenv("DISCORD_WEBHOOK_URL") or "").strip()

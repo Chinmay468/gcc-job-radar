@@ -63,6 +63,8 @@ class JobPosting(BaseModel):
     direct_search_url: Optional[str] = None
     description: Optional[str] = None
     relevance_score: Optional[int] = 0
+    matched_reasons: list[str] = []
+    why: Optional[str] = None
     tailored_tex_path: Optional[str] = None
     tailored_pdf_path: Optional[str] = None
 

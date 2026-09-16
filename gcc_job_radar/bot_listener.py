@@ -47,6 +47,7 @@ from gcc_job_radar.scanner import scan_all_companies
 from gcc_job_radar.link_resolver import resolve_effective_apply_url
 from gcc_job_radar.models import JobPosting, ATSProvider
 from gcc_job_radar.notifier import build_job_inline_keyboard
+from gcc_job_radar.presentation import build_ranked_presentation, format_jobs_html
 from gcc_job_radar.resume_tailor_bridge import tailor_resume_for_job
 from gcc_job_radar.display import console
 
@@ -257,35 +258,6 @@ def _dict_to_job_posting(j: dict[str, Any]) -> JobPosting:
     )
 
 
-def format_jobs_html(jobs: list[JobPosting | dict[str, Any]], title: str) -> str:
-    """Format a list of JobPostings into an HTML message for Telegram."""
-    if not jobs:
-        return f"ℹ️ <b>{html.escape(title)}</b>\n\nNo matching positions found."
-
-    msg = f"🚀 <b>{html.escape(title)} ({len(jobs)})</b>\n\n"
-    for idx, item in enumerate(jobs, start=1):
-        if isinstance(item, JobPosting):
-            company = item.company
-            pos_title = item.title
-            location = item.location
-            ats = item.provider.value.upper()
-            date = item.published_date or "Active"
-        else:
-            company = item.get("company", "")
-            pos_title = item.get("title", "")
-            location = item.get("location", "")
-            ats = str(item.get("provider", "")).upper()
-            date = item.get("published_date") or "Active"
-
-        effective_url, _, label = resolve_effective_apply_url(item)
-
-        msg += (
-            f"<b>{idx}. {html.escape(company)}</b>\n"
-            f"💼 {html.escape(pos_title)}\n"
-            f"📍 {html.escape(location)} ({ats}) • 📅 {html.escape(date)}\n"
-            f"🔗 <a href=\"{html.escape(effective_url)}\">{html.escape(label)}</a>\n\n"
-        )
-    return msg.strip()
 
 
 async def handle_command(

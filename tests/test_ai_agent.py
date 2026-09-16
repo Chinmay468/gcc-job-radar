@@ -690,8 +690,11 @@ async def test_execute_tool_query_jobs_hard_cap_and_compact_schema(tmp_path: Pat
     assert res["count"] == 15
     assert len(res["jobs"]) == 15
 
-    # Check compact schema: only essential keys
-    allowed_keys = {"id", "company", "title", "location", "apply_url", "published_date"}
+    # Check compact schema: includes relevance and recommendation rationale
+    allowed_keys = {
+        "id", "company", "title", "location", "apply_url", "published_date",
+        "relevance_score", "matched_reasons", "why",
+    }
     for j in res["jobs"]:
         assert set(j.keys()) == allowed_keys
 
