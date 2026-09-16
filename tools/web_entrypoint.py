@@ -9,6 +9,7 @@ Runs:
 """
 
 import asyncio
+import gc
 import http.server
 import json
 import logging
@@ -43,6 +44,40 @@ from gcc_job_radar.display import console
 logger = logging.getLogger("web_entrypoint")
 
 
+def get_memory_usage_mb() -> float:
+    """Get current process Resident Set Size (RSS) in megabytes."""
+    # 1. Linux container /proc/self/status (Render runtime)
+    try:
+        with open("/proc/self/status", "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    parts = line.split()
+                    return round(float(parts[1]) / 1024.0, 2)
+    except Exception:
+        pass
+
+    # 2. Unix / macOS resource module
+    try:
+        import resource
+        rusage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            return round(rusage / (1024.0 * 1024.0), 2)
+        return round(rusage / 1024.0, 2)
+    except Exception:
+        pass
+
+    # 3. Tracemalloc fallback
+    try:
+        import tracemalloc
+        if tracemalloc.is_tracing():
+            cur, _ = tracemalloc.get_traced_memory()
+            return round(cur / (1024.0 * 1024.0), 2)
+    except Exception:
+        pass
+
+    return 0.0
+
+
 class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
     """HTTP Request Handler serving health checks for Render keep-alive monitors."""
 
@@ -59,7 +94,12 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         clean_path = self.path.split("?")[0].rstrip("/")
         if clean_path in ("", "/health"):
-            self._send_response_payload(200, {"status": "healthy", "service": "gcc-job-radar"})
+            payload = {
+                "status": "healthy",
+                "service": "gcc-job-radar",
+                "memory_rss_mb": get_memory_usage_mb(),
+            }
+            self._send_response_payload(200, payload)
         else:
             self._send_response_payload(404, {"error": "not found"})
 
@@ -92,6 +132,29 @@ def start_http_server(host: str = "0.0.0.0", port: int = 10000) -> http.server.H
     return server
 
 
+async def memory_watchdog(interval_seconds: int = 300) -> None:
+    """Periodic memory maintenance and logging to keep RAM footprint low."""
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+            rss_mb = get_memory_usage_mb()
+            collected = gc.collect()
+            new_rss = get_memory_usage_mb()
+            if rss_mb > 250:
+                logger.warning(
+                    "Memory watchdog: High RAM usage detected (%.2f MB). GC collected %d objects -> %.2f MB",
+                    rss_mb,
+                    collected,
+                    new_rss,
+                )
+            else:
+                logger.debug("Memory watchdog: RAM usage %.2f MB (GC reclaimed %d objects)", new_rss, collected)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.debug("Memory watchdog error: %s", exc)
+
+
 async def run_services() -> None:
     """Run HTTP health server and Telegram bot listener with graceful shutdown."""
     port = int(os.getenv("PORT", "10000"))
@@ -116,6 +179,7 @@ async def run_services() -> None:
                 except Exception:
                     pass
 
+    watchdog_task = asyncio.create_task(memory_watchdog())
     bot_task = asyncio.create_task(run_bot_listener())
     stop_waiter = asyncio.create_task(stop_event.wait())
 
@@ -140,6 +204,11 @@ async def run_services() -> None:
             logger.info("Bot listener finished cleanly.")
 
     finally:
+        watchdog_task.cancel()
+        try:
+            await watchdog_task
+        except asyncio.CancelledError:
+            pass
         logger.info("Shutting down HTTP server...")
         server.shutdown()
         server.server_close()

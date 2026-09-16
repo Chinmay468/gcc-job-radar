@@ -11,6 +11,8 @@ services:
         value: "1"
       - key: PRIMARY_LLM_PROVIDER
         value: groq
+      - key: SCAN_CONCURRENCY
+        value: "15"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID

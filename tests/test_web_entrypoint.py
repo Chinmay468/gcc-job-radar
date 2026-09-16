@@ -32,7 +32,10 @@ def test_health_check_root(test_server):
         assert resp.status == 200
         assert "application/json" in resp.headers.get("Content-Type", "")
         body = json.loads(resp.read().decode("utf-8"))
-        assert body == {"status": "healthy", "service": "gcc-job-radar"}
+        assert body["status"] == "healthy"
+        assert body["service"] == "gcc-job-radar"
+        assert "memory_rss_mb" in body
+        assert isinstance(body["memory_rss_mb"], (int, float))
 
 
 def test_health_check_endpoint(test_server):
@@ -43,7 +46,10 @@ def test_health_check_endpoint(test_server):
         assert resp.status == 200
         assert "application/json" in resp.headers.get("Content-Type", "")
         body = json.loads(resp.read().decode("utf-8"))
-        assert body == {"status": "healthy", "service": "gcc-job-radar"}
+        assert body["status"] == "healthy"
+        assert body["service"] == "gcc-job-radar"
+        assert "memory_rss_mb" in body
+        assert isinstance(body["memory_rss_mb"], (int, float))
 
 
 def test_not_found_endpoint(test_server):

@@ -1,7 +1,9 @@
 """High-throughput concurrent scanning engine for GCC Job Radar."""
 
 import asyncio
+import gc
 import logging
+import os
 import random
 from typing import Any, Callable, Optional
 from urllib.parse import urlparse
@@ -39,7 +41,7 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 gcc-job-radar/0.1.0"
 )
 
-DEFAULT_GLOBAL_CONCURRENCY: int = 30
+DEFAULT_GLOBAL_CONCURRENCY: int = int(os.getenv("SCAN_CONCURRENCY", "30"))
 
 
 def fast_json_loads(data: str | bytes | httpx.Response) -> Any:
@@ -251,6 +253,9 @@ async def scan_all_companies(
     base_retry_delay: float = 0.5,
 ) -> list[JobPosting]:
     """Scan configured companies with bounded global/domain concurrency and exponential backoff retries."""
+    if not companies:
+        return []
+
     rate_limiter = HostRateLimiter(
         global_concurrency=concurrency,
         domain_limits=domain_limits,
@@ -266,9 +271,9 @@ async def scan_all_companies(
     close_client = False
     if client is None:
         limits = httpx.Limits(
-            max_connections=max(100, concurrency * 4),
-            max_keepalive_connections=max(40, concurrency * 2),
-            keepalive_expiry=30.0,
+            max_connections=max(20, concurrency * 2),
+            max_keepalive_connections=min(20, concurrency),
+            keepalive_expiry=15.0,
         )
         base_transport = httpx.AsyncHTTPTransport(retries=0, http2=HAS_HTTP2, limits=limits)
         transport = RetryTransport(
@@ -293,44 +298,70 @@ async def scan_all_companies(
                 base_delay=base_retry_delay,
             )
 
-    try:
-        async def worker(company: CompanyConfig) -> list[JobPosting]:
-            nonlocal completed_count
+    all_postings: list[JobPosting] = []
+    seen_keys: set[tuple[str, str]] = set()
+    lock = asyncio.Lock()
+
+    queue: asyncio.Queue[CompanyConfig] = asyncio.Queue()
+    for company in companies:
+        queue.put_nowait(company)
+
+    worker_count = min(concurrency, max(1, total_companies))
+
+    async def worker() -> None:
+        nonlocal completed_count
+        while True:
+            try:
+                company = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
             domain = get_company_domain(company)
             domain_sem = rate_limiter.get_domain_semaphore(domain)
+            results: list[JobPosting] = []
 
-            async with rate_limiter.global_semaphore:
-                async with domain_sem:
-                    try:
-                        results = await fetch_single_company(company, client)
-                    except Exception as exc:
-                        logger.debug("Scan error for %s: %s", company.name, exc)
-                        results = []
-                    finally:
-                        completed_count += 1
-                        if on_progress:
-                            on_progress(company.name, completed_count, total_companies)
-                    return results
+            try:
+                async with rate_limiter.global_semaphore:
+                    async with domain_sem:
+                        try:
+                            results = await fetch_single_company(company, client)
+                        except Exception as exc:
+                            logger.debug("Scan error for %s: %s", company.name, exc)
+                            results = []
+            finally:
+                completed_count += 1
+                if on_progress:
+                    on_progress(company.name, completed_count, total_companies)
+                queue.task_done()
 
-        tasks = [worker(company) for company in companies]
-        gathered_results = await asyncio.gather(*tasks, return_exceptions=True)
+            if results:
+                valid_posts = []
+                for post in results:
+                    # Defense-in-depth: enforce strict entry-level tech title matching
+                    if not matches_target_title(post.title):
+                        continue
+                    key = (post.company.lower(), str(post.id).lower())
+                    valid_posts.append((key, post))
+
+                if valid_posts:
+                    async with lock:
+                        for key, post in valid_posts:
+                            if key not in seen_keys:
+                                seen_keys.add(key)
+                                all_postings.append(post)
+
+            # Periodic garbage collection every 100 companies completed
+            if completed_count % 100 == 0:
+                gc.collect()
+
+    try:
+        workers = [asyncio.create_task(worker()) for _ in range(worker_count)]
+        if workers:
+            await asyncio.gather(*workers)
     finally:
         if close_client:
             await client.aclose()
-
-    all_postings: list[JobPosting] = []
-    seen_keys: set[tuple[str, str]] = set()
-
-    for item in gathered_results:
-        if isinstance(item, list):
-            for post in item:
-                # Defense-in-depth: enforce strict entry-level tech title matching
-                if not matches_target_title(post.title):
-                    continue
-                key = (post.company.lower(), str(post.id).lower())
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    all_postings.append(post)
+        gc.collect()
 
     # Sort postings by published_date descending (newest first, 'Active' or unknown at the end)
     def sort_key(p: JobPosting) -> tuple[int, str]:
