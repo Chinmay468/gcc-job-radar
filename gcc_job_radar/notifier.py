@@ -491,19 +491,32 @@ async def dispatch_notifications(
     if not discord_url and not (tg_token and tg_chat):
         return
 
-    # Automated resume tailoring for new postings if GROQ_API_KEY is configured
+    # Automated resume tailoring for top-priority new postings if GROQ_API_KEY is configured
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
     if groq_api_key:
+        max_tailor = int(os.getenv("MAX_AUTO_TAILOR_JOBS", "2"))
+        min_score = int(os.getenv("MIN_AUTO_TAILOR_SCORE", "10"))
+        tailored_count = 0
         for job in new_jobs:
             if getattr(job, "tailored_tex_path", None):
                 continue
+            score = getattr(job, "relevance_score", 0) or 0
+            if score < min_score:
+                continue
+            if tailored_count >= max_tailor:
+                break
             try:
                 tex_path, pdf_path = tailor_resume_for_job(job)
                 if tex_path:
                     job.tailored_tex_path = tex_path
                     job.tailored_pdf_path = pdf_path
+                    tailored_count += 1
+                else:
+                    # Tailoring returned (None, None), likely hit rate limit; stop trying more in this batch
+                    break
             except Exception as exc:
                 logger.warning("Error during resume tailoring for %s: %s", job.company, exc)
+                break
     else:
         logger.debug("GROQ_API_KEY not configured; skipping automated resume tailoring.")
 

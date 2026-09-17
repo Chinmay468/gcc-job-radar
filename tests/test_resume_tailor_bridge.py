@@ -1,9 +1,10 @@
-﻿from pathlib import Path
+from pathlib import Path
 import subprocess
 import pytest
 
 from gcc_job_radar.models import ATSProvider, JobPosting
 from gcc_job_radar.resume_tailor_bridge import (
+    DEFAULT_MODEL,
     get_builder_script_path,
     get_master_resume_path,
     sanitize_filename,
@@ -114,7 +115,7 @@ def test_tailor_resume_subprocess_call_success(valid_entry_job: JobPosting, monk
     assert "--role" in cmd
     assert cmd[cmd.index("--role") + 1] == "Software Engineer 1"
     assert "--model" in cmd
-    assert cmd[cmd.index("--model") + 1] == "llama-3.3-70b-versatile"
+    assert cmd[cmd.index("--model") + 1] == DEFAULT_MODEL
     assert "--compile" in cmd
 
 
@@ -145,3 +146,18 @@ def test_tailor_resume_subprocess_timeout(valid_entry_job: JobPosting, monkeypat
     tex, pdf = tailor_resume_for_job(valid_entry_job, output_dir=tmp_path / "tailored")
     assert tex is None
     assert pdf is None
+
+
+def test_resume_tailor_sanitize_latex():
+    """Verify Unicode non-breaking hyphens, en/em-dashes, and quotes are normalized for LaTeX and Windows cp1252."""
+    import sys
+    sys.path.append("builder")
+    from resume_tailor import sanitize_latex
+
+    raw = "full\u2011stack \u2013 distributed \u2014 \u2018secure\u2019 \u201ccloud\u201d"
+    sanitized = sanitize_latex(raw)
+    assert "\u2011" not in sanitized
+    assert "full-stack" in sanitized
+    assert " -- distributed --- " in sanitized
+    assert "`secure'" in sanitized
+    assert "``cloud''" in sanitized

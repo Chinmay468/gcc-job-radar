@@ -14,7 +14,7 @@ from gcc_job_radar.models import JobPosting
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
 
 def get_builder_script_path() -> Optional[Path]:
@@ -141,12 +141,16 @@ def tailor_resume_for_job(
 
     logger.info("Tailoring resume for %s - %s via Groq model %s...", job.company, job.title, model)
     try:
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
         res = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
-            env=dict(os.environ),
+            env=env,
         )
         if res.returncode != 0:
             logger.warning("resume_tailor.py failed (code %d): %s", res.returncode, res.stderr or res.stdout)

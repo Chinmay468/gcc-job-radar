@@ -396,3 +396,79 @@ async def test_dispatch_notifications_without_groq_key_skips_tailoring(
     assert len(tailor_called) == 0
 
 
+@pytest.mark.asyncio
+async def test_dispatch_notifications_tailoring_throttled_and_capped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Verify tailoring is capped at MAX_AUTO_TAILOR_JOBS and skips jobs below MIN_AUTO_TAILOR_SCORE."""
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq-dummy-token")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "mock_bot_token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "mock_chat_id")
+    monkeypatch.setenv("MAX_AUTO_TAILOR_JOBS", "1")
+    monkeypatch.setenv("MIN_AUTO_TAILOR_SCORE", "20")
+
+    jobs = [
+        JobPosting(
+            id="job-high",
+            company="Google",
+            title="Software Engineer - Java Spring Boot",
+            location="Bengaluru, India",
+            apply_url="https://careers.google.com/1",
+            published_date="2026-09-01",
+            provider=ATSProvider.GREENHOUSE,
+            relevance_score=35,
+            why="High match",
+        ),
+        JobPosting(
+            id="job-mid",
+            company="Amazon",
+            title="Software Engineer - Backend Java",
+            location="Bengaluru, India",
+            apply_url="https://careers.amazon.com/2",
+            published_date="2026-09-01",
+            provider=ATSProvider.GREENHOUSE,
+            relevance_score=25,
+            why="Mid match",
+        ),
+        JobPosting(
+            id="job-low",
+            company="Misc",
+            title="Junior Dev",
+            location="Bengaluru, India",
+            apply_url="https://careers.misc.com/3",
+            published_date="2026-09-01",
+            provider=ATSProvider.GREENHOUSE,
+            relevance_score=5,
+            why="Low match",
+        ),
+    ]
+
+    tailored_companies = []
+
+    def mock_tailor(job, **kwargs):
+        tailored_companies.append(job.company)
+        return f"tailored/{job.company}.tex", None
+
+    import gcc_job_radar.notifier as notifier
+    monkeypatch.setattr(notifier, "tailor_resume_for_job", mock_tailor)
+
+    original_async_client = httpx.AsyncClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"ok": True})
+
+    def mock_client_factory(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return original_async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", mock_client_factory)
+
+    test_db = tmp_path / "notifier_throttle_test.db"
+    await dispatch_notifications(jobs, db_path=test_db)
+
+    # Only 1 job tailored because MAX_AUTO_TAILOR_JOBS=1 and Google has the highest score
+    assert len(tailored_companies) == 1
+    assert tailored_companies[0] == "Google"
+
+
+
