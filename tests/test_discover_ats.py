@@ -15,6 +15,8 @@ from tools.discover_ats import (
     extract_slugs_from_urls,
     is_excluded_slug,
     parse_args,
+    search_web_async,
+    serper_search_async,
     slug_to_name,
     validate_ashby_slug,
     validate_candidate_slug,
@@ -237,8 +239,43 @@ def test_parse_args_options() -> None:
     assert args_default.append is True
 
     # Overrides
-    args_custom = parse_args(["-p", "ashby,lever", "-m", "3", "--no-append", "-o", "out.json"])
+    args_custom = parse_args(["-p", "ashby,lever", "-m", "3", "--no-append", "-o", "out.json", "-c", "Retell AI"])
     assert args_custom.platforms == "ashby,lever"
     assert args_custom.max_queries == 3
     assert args_custom.append is False
     assert args_custom.output == "out.json"
+    assert args_custom.company == "Retell AI"
+
+
+@pytest.mark.asyncio
+async def test_serper_search_async_success() -> None:
+    """Verify serper_search_async extracts organic links correctly."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "organic": [
+            {"link": "https://jobs.ashbyhq.com/retell-ai/job1"},
+            {"link": "https://jobs.ashbyhq.com/retell-ai/job2"},
+        ]
+    }
+
+    client_mock = AsyncMock(spec=httpx.AsyncClient)
+    client_mock.post.return_value = mock_resp
+
+    urls = await serper_search_async("site:jobs.ashbyhq.com Retell AI", client_mock, api_key="fake-key")
+    assert len(urls) == 2
+    assert "https://jobs.ashbyhq.com/retell-ai/job1" in urls
+
+
+@pytest.mark.asyncio
+async def test_search_web_async_prefers_serper(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify search_web_async uses Serper when SERPER_API_KEY is present."""
+    monkeypatch.setenv("SERPER_API_KEY", "test-key")
+
+    with patch("tools.discover_ats.serper_search_async", new_callable=AsyncMock) as mock_serper:
+        mock_serper.return_value = ["https://jobs.ashbyhq.com/test-co"]
+        client_mock = AsyncMock(spec=httpx.AsyncClient)
+
+        urls = await search_web_async("test query", client_mock)
+        assert urls == ["https://jobs.ashbyhq.com/test-co"]
+        mock_serper.assert_called_once()

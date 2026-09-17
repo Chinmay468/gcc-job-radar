@@ -12,6 +12,7 @@ from dataclasses import asdict
 from html.parser import HTMLParser
 import json
 import logging
+import os
 from pathlib import Path
 import random
 import re
@@ -25,6 +26,18 @@ import httpx
 ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+
+# Ensure standard streams use utf-8 encoding on headless/Windows loggers
+for _stream_name in ("stdout", "stderr"):
+    _stream = getattr(sys, _stream_name, None)
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+from dotenv import load_dotenv
+load_dotenv(ROOT_DIR / ".env")
 
 from gcc_job_radar.config import COMPANIES
 from gcc_job_radar.models import ATSProvider
@@ -281,6 +294,7 @@ USER_AGENTS = [
 ]
 
 DDG_URL = "https://html.duckduckgo.com/html/"
+SERPER_URL = "https://google.serper.dev/search"
 
 SWE_QUERY_TERMS = [
     "software engineer",
@@ -405,6 +419,47 @@ async def polite_sleep_async(base: float = 2.5, jitter: float = 2.0) -> None:
     await asyncio.sleep(delay)
 
 
+async def serper_search_async(
+    query: str,
+    client: httpx.AsyncClient,
+    api_key: Optional[str] = None,
+    max_results: int = 30,
+) -> list[str]:
+    """Execute search via Serper.dev Google Search API and extract result URLs."""
+    key = api_key or os.getenv("SERPER_API_KEY")
+    if not key:
+        return []
+
+    headers = {
+        "X-API-KEY": key,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "q": query,
+        "num": min(max_results, 10),
+    }
+
+    try:
+        resp = await client.post(SERPER_URL, headers=headers, json=payload, timeout=12.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            results: list[str] = []
+            for item in data.get("organic", []):
+                link = item.get("link")
+                if link:
+                    results.append(link)
+            return results
+        elif resp.status_code in (401, 403, 429):
+            console.print(f"    [bold yellow][!][/bold yellow] Serper.dev returned {resp.status_code} (check API key / quota).")
+            return []
+        else:
+            console.print(f"    [bold yellow][!][/bold yellow] Serper.dev returned status {resp.status_code}")
+            return []
+    except Exception as exc:
+        console.print(f"    [bold red][!][/bold red] Serper request failed: {exc}")
+        return []
+
+
 async def ddg_search_async(
     query: str,
     client: httpx.AsyncClient,
@@ -434,6 +489,22 @@ async def ddg_search_async(
     except Exception as exc:
         console.print(f"    [bold red][!][/bold red] DDG request failed: {exc}")
         return []
+
+
+async def search_web_async(
+    query: str,
+    client: httpx.AsyncClient,
+    max_results: int = 30,
+) -> list[str]:
+    """Execute search using Serper.dev (Google) if SERPER_API_KEY is available, falling back to DuckDuckGo."""
+    serper_key = os.getenv("SERPER_API_KEY")
+    if serper_key:
+        urls = await serper_search_async(query, client, api_key=serper_key, max_results=max_results)
+        if urls:
+            return urls
+        console.print("    [dim]Serper yielded 0 results; checking DuckDuckGo...[/dim]")
+
+    return await ddg_search_async(query, client, max_results=max_results)
 
 
 async def validate_greenhouse_slug(slug: str, client: httpx.AsyncClient) -> tuple[bool, int]:
@@ -540,6 +611,7 @@ async def discover_platform_candidates(
     existing_names: set[str],
     done_queries: set[str],
     state_file: Optional[Path] = None,
+    company: Optional[str] = None,
 ) -> list[ProbeResult]:
     """Execute search discovery and validation for a single ATS platform."""
     spec = PLATFORM_SPECS.get(platform.lower())
@@ -549,7 +621,10 @@ async def discover_platform_candidates(
 
     console.print(f"\n[bold magenta]=== DISCOVERING {platform.upper()} ({spec['site']}) ===[/bold magenta]")
 
-    queries = [f'site:{spec["site"]} "{term}"' for term in SWE_QUERY_TERMS][:max_queries]
+    if company:
+        queries = [f'site:{spec["site"]} "{company}"']
+    else:
+        queries = [f'site:{spec["site"]} "{term}"' for term in SWE_QUERY_TERMS][:max_queries]
     verified: list[ProbeResult] = []
     seen_in_run: set[str] = set()
 
@@ -560,7 +635,7 @@ async def discover_platform_candidates(
             continue
 
         console.print(f"  [cyan]Query:[/cyan] {q}")
-        urls = await ddg_search_async(q, client, max_results=30)
+        urls = await search_web_async(q, client, max_results=30)
         console.print(f"    -> [dim]{len(urls)} raw search URL(s)[/dim]")
 
         slugs = extract_slugs_from_urls(urls, spec["slug_re"])
@@ -580,7 +655,7 @@ async def discover_platform_candidates(
                 if res:
                     verified.append(res)
                     console.print(
-                        f"      [bold green]✓[/bold green] [bold white]{res.company_name}[/bold white] "
+                        f"      [bold green][+][/bold green] [bold white]{res.company_name}[/bold white] "
                         f"([cyan]{res.board_token}[/cyan] -> [green]{res.active_postings} jobs[/green])"
                     )
                 # Brief politeness pause between direct API hits
@@ -597,7 +672,10 @@ async def discover_platform_candidates(
             except Exception:
                 pass
 
-        await polite_sleep_async(base=2.5, jitter=2.0)
+        if os.getenv("SERPER_API_KEY"):
+            await asyncio.sleep(0.5)
+        else:
+            await polite_sleep_async(base=2.5, jitter=2.0)
 
     return verified
 
@@ -605,7 +683,7 @@ async def discover_platform_candidates(
 def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
     """Parse CLI options for discover_ats."""
     parser = argparse.ArgumentParser(
-        description="Async ATS Company Discovery via DuckDuckGo search.",
+        description="Async ATS Company Discovery via Serper.dev / DuckDuckGo search.",
     )
     parser.add_argument(
         "--platforms", "-p",
@@ -617,6 +695,11 @@ def parse_args(args: Optional[list[str]] = None) -> argparse.Namespace:
         type=int,
         default=10,
         help="Max search queries to execute per platform (default: 10)",
+    )
+    parser.add_argument(
+        "--company", "-c",
+        default=None,
+        help="Optional company name to specifically search for across platforms",
     )
     parser.add_argument(
         "--append",
@@ -641,10 +724,12 @@ async def main_async(args: argparse.Namespace) -> None:
     """Async coordinator for ATS discovery."""
     platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
     existing_tokens, existing_names = get_existing_exclusions()
+    engine_name = "Serper.dev (Google Search API)" if os.getenv("SERPER_API_KEY") else "DuckDuckGo HTML Search"
     console.print(
         f"[bold green][*][/bold green] Initialized dynamic exclusion: "
         f"[cyan]{len(existing_tokens)}[/cyan] tokens, [cyan]{len(existing_names)}[/cyan] company names from config.COMPANIES"
     )
+    console.print(f"[bold green][*][/bold green] Search Engine: [bold cyan]{engine_name}[/bold cyan]")
 
     state_path = Path(args.state_file) if args.state_file else None
     done_queries: set[str] = set()
@@ -672,6 +757,7 @@ async def main_async(args: argparse.Namespace) -> None:
                 existing_names=existing_names,
                 done_queries=done_queries,
                 state_file=state_path,
+                company=args.company,
             )
             all_discovered.extend(res)
 
