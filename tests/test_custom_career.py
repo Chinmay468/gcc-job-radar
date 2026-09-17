@@ -175,6 +175,7 @@ async def test_custom_career_turbohire_strict_entry_level_filtering():
         titles = [p.title for p in postings]
         assert "Software Development Engineer 1" in titles
         assert "SDE-1" in titles
+        assert all(str(p.apply_url).startswith("https://flipkart.turbohire.co/job/publicjobs/") for p in postings)
 
         # Verify all noisy and senior roles are strictly absent
         assert not any("SDE II" in t for t in titles)

@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from gcc_job_radar.clients.base import BaseATSClient, DEFAULT_TIMEOUT
 from gcc_job_radar.db import canonicalize_url
-from gcc_job_radar.filters import is_remote_opening, matches_india_location, matches_target_title
+from gcc_job_radar.filters import is_entry_level, is_remote_opening, matches_india_location, matches_target_title
 from gcc_job_radar.models import ATSProvider, CompanyConfig, JobPosting
 
 logger = logging.getLogger(__name__)
@@ -269,12 +269,12 @@ class CustomCareerClient(BaseATSClient):
                 "Content-Type": "application/json",
             }
 
-            for pt in (1, 0):
-                jobs_url = f"https://api.turbohire.co/api/careerpagev2/filteredjobs?orgId={org_id}&pageType={pt}"
-                resp = await self.client.post(jobs_url, json={}, headers=auth_headers, timeout=15.0)
-                if resp.status_code != 200:
-                    continue
-
+            # Query the public career page (pageType=0).
+            # Note: pageType=1 corresponds to TurboHire's INTERNAL_JOB_PAGE (internal employee mobility),
+            # which are not public postings and return 404 for external candidates.
+            jobs_url = f"https://api.turbohire.co/api/careerpagev2/filteredjobs?orgId={org_id}&pageType=0"
+            resp = await self.client.post(jobs_url, json={}, headers=auth_headers, timeout=15.0)
+            if resp.status_code == 200:
                 data = resp.json()
                 raw_jobs = data.get("Result", [])
                 seen_job_ids: set[str] = {p.id for p in postings}
@@ -313,7 +313,12 @@ class CustomCareerClient(BaseATSClient):
                     if min_exp > 2:
                         continue
 
-                    apply_url = f"{origin}/job/{job_uuid}"
+                    # Extract job description if available
+                    raw_desc = j.get("JobDescV2") or j.get("JobDescription") or ""
+                    clean_desc = re.sub(r"<[^>]+>", " ", raw_desc).strip() if raw_desc else ""
+
+                    # Canonical TurboHire public job route (/job/publicjobs/:id)
+                    apply_url = f"{origin}/job/publicjobs/{job_uuid}"
 
                     try:
                         posting = JobPosting(
@@ -325,15 +330,14 @@ class CustomCareerClient(BaseATSClient):
                             published_date=str(j.get("UpdatedDate") or "Recent")[:10],
                             provider=ATSProvider.CUSTOM,
                             is_remote=is_remote_opening(title) or is_remote_opening(addr),
+                            description=clean_desc or None,
                             status="NEW",
                         )
-                        postings.append(posting)
-                        seen_job_ids.add(job_id)
+                        if is_entry_level(posting, content=clean_desc):
+                            postings.append(posting)
+                            seen_job_ids.add(job_id)
                     except ValidationError as err:
                         logger.debug("Validation error for Turbohire job %s: %s", job_id, err)
-
-                if postings:
-                    break
 
         except Exception as exc:
             logger.debug("Error in _fetch_turbohire_jobs for %s: %s", company_name, exc)
