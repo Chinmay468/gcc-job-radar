@@ -1,0 +1,352 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0f1d" />
+      <stop offset="50%" stop-color="#0e172a" />
+      <stop offset="100%" stop-color="#070d18" />
+    </linearGradient>
+
+    <!-- Header Gradient -->
+    <linearGradient id="header-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="30%" stop-color="#34d399" />
+      <stop offset="70%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#fb923c" />
+    </linearGradient>
+    
+    <!-- Tier Card Gradients -->
+    <linearGradient id="card-cyan" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0c4a6e" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#082f49" stop-opacity="0.8" />
+    </linearGradient>
+    <linearGradient id="card-green" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#022c22" stop-opacity="0.8" />
+    </linearGradient>
+    <linearGradient id="card-purple" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#581c87" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#2e1065" stop-opacity="0.8" />
+    </linearGradient>
+    <linearGradient id="card-orange" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7c2d12" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#431407" stop-opacity="0.8" />
+    </linearGradient>
+    <linearGradient id="card-indigo" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1e1b4b" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#31104b" stop-opacity="0.9" />
+    </linearGradient>
+
+    <!-- Drop Shadow Filter -->
+    <filter id="drop-shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+
+    <!-- Arrow Markers -->
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8" />
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#34d399" />
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#c084fc" />
+    </marker>
+  </defs>
+
+  <style>
+    .title { font-family: system-ui, -apple-system, sans-serif; font-weight: 800; font-size: 28px; fill: #ffffff; }
+    .subtitle { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; fill: #94a3b8; }
+    .badge-text { font-family: system-ui, -apple-system, sans-serif; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; }
+    .col-title { font-family: system-ui, -apple-system, sans-serif; font-weight: 700; font-size: 16px; }
+    .card-title { font-family: system-ui, -apple-system, sans-serif; font-weight: 600; font-size: 13.5px; fill: #f8fafc; }
+    .card-desc { font-family: system-ui, -apple-system, sans-serif; font-size: 11px; fill: #94a3b8; line-height: 1.4; }
+    .meta-tag { font-family: ui-monospace, monospace; font-size: 9.5px; }
+    .flow-line { stroke-dasharray: 6 4; stroke-width: 2; fill: none; }
+  </style>
+
+  <!-- Canvas Background -->
+  <rect width="1200" height="780" rx="20" fill="url(#bg-grad)" stroke="#1e293b" stroke-width="1.5" />
+
+  <!-- Top Header Banner -->
+  <g transform="translate(50, 40)">
+    <rect x="0" y="0" width="1100" height="76" rx="14" fill="#0f172a" stroke="#1e293b" stroke-width="1" />
+    
+    <!-- Radar Icon / Emblem -->
+    <rect x="16" y="16" width="44" height="44" rx="10" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5" />
+    <circle cx="38" cy="38" r="13" fill="none" stroke="#38bdf8" stroke-width="1.5" />
+    <circle cx="38" cy="38" r="7" fill="none" stroke="#34d399" stroke-width="1.5" />
+    <circle cx="38" cy="38" r="2.5" fill="#fb923c" />
+
+    <text x="74" y="36" class="title">GCC Job Radar</text>
+    <text x="262" y="36" font-family="system-ui, sans-serif" font-size="20" font-weight="300" fill="#64748b">|</text>
+    <text x="276" y="36" font-family="system-ui, sans-serif" font-size="18" font-weight="600" fill="url(#header-grad)">End-to-End System Flow</text>
+    <text x="74" y="56" class="subtitle">Automated intelligence pipeline for entry-level tech roles in India from 4,800+ Global Capability Centers</text>
+
+    <!-- Live Status Pill -->
+    <rect x="955" y="22" width="130" height="32" rx="16" fill="#022c22" stroke="#059669" stroke-width="1" />
+    <circle cx="973" cy="38" r="4" fill="#34d399" />
+    <text x="985" y="42" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#34d399">24/7 Automated</text>
+  </g>
+
+  <!-- STAGE 1: INGESTION -->
+  <g transform="translate(50, 145)">
+    <rect width="245" height="475" rx="14" fill="url(#card-cyan)" stroke="#0284c7" stroke-width="1.5" filter="url(#drop-shadow)" />
+    <rect x="14" y="14" width="75" height="22" rx="6" fill="#0284c7" />
+    <text x="51" y="29" text-anchor="middle" class="badge-text" fill="#ffffff">STAGE 1</text>
+    <text x="14" y="58" class="col-title" fill="#38bdf8">Ingestion Tier</text>
+    <text x="14" y="75" class="card-desc">Continuous multi-channel discovery</text>
+    <line x1="14" y1="85" x2="231" y2="85" stroke="#0369a1" stroke-width="1" stroke-opacity="0.6" />
+
+    <!-- Sub-card 1: ATS APIs -->
+    <g transform="translate(12, 98)">
+      <rect width="221" height="105" rx="10" fill="#082f49" stroke="#0284c7" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Direct ATS APIs</text>
+      <text x="12" y="42" class="card-desc">Native async querying of canonical career boards</text>
+      <g transform="translate(12, 68)">
+        <rect width="56" height="18" rx="4" fill="#0c4a6e" />
+        <text x="28" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">Greenhouse</text>
+        <rect x="60" width="40" height="18" rx="4" fill="#0c4a6e" />
+        <text x="80" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">Lever</text>
+        <rect x="104" width="42" height="18" rx="4" fill="#0c4a6e" />
+        <text x="125" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">Ashby</text>
+        <rect x="150" width="46" height="18" rx="4" fill="#0c4a6e" />
+        <text x="173" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">Workday</text>
+      </g>
+    </g>
+
+    <!-- Sub-card 2: Email Alerts -->
+    <g transform="translate(12, 215)">
+      <rect width="221" height="110" rx="10" fill="#082f49" stroke="#0284c7" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Email Alerts (IMAP)</text>
+      <text x="12" y="42" class="card-desc">Automated ingestion across 3 Gmail/IMAP accounts</text>
+      <g transform="translate(12, 72)">
+        <rect width="50" height="18" rx="4" fill="#0c4a6e" />
+        <text x="25" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">LinkedIn</text>
+        <rect x="54" width="44" height="18" rx="4" fill="#0c4a6e" />
+        <text x="76" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">Naukri</text>
+        <rect x="102" width="42" height="18" rx="4" fill="#0c4a6e" />
+        <text x="123" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">Indeed</text>
+        <rect x="148" width="58" height="18" rx="4" fill="#0c4a6e" />
+        <text x="177" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">Glassdoor</text>
+      </g>
+    </g>
+
+    <!-- Sub-card 3: Campus & Web -->
+    <g transform="translate(12, 337)">
+      <rect width="221" height="115" rx="10" fill="#082f49" stroke="#0284c7" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Campus &amp; Custom Portals</text>
+      <text x="12" y="42" class="card-desc">Hackathons, off-campus competitions &amp; scrapers</text>
+      <g transform="translate(12, 76)">
+        <rect width="82" height="18" rx="4" fill="#0c4a6e" />
+        <text x="41" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">Unstop Campus</text>
+        <rect x="86" width="108" height="18" rx="4" fill="#0c4a6e" />
+        <text x="140" y="12" text-anchor="middle" class="meta-tag" fill="#7dd3fc">Flipkart TurboHire</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Flow Connector 1 -> 2 -->
+  <path d="M 295 382 L 333 382" class="flow-line" stroke="#38bdf8" marker-end="url(#arrow-cyan)" />
+
+  <!-- STAGE 2: FILTERING & SCORING -->
+  <g transform="translate(335, 145)">
+    <rect width="245" height="475" rx="14" fill="url(#card-green)" stroke="#059669" stroke-width="1.5" filter="url(#drop-shadow)" />
+    <rect x="14" y="14" width="75" height="22" rx="6" fill="#059669" />
+    <text x="51" y="29" text-anchor="middle" class="badge-text" fill="#ffffff">STAGE 2</text>
+    <text x="14" y="58" class="col-title" fill="#34d399">Smart Pipeline</text>
+    <text x="14" y="75" class="card-desc">Zero false positives &amp; AI relevance</text>
+    <line x1="14" y1="85" x2="231" y2="85" stroke="#047857" stroke-width="1" stroke-opacity="0.6" />
+
+    <!-- Sub-card 1: Strict Level Filter -->
+    <g transform="translate(12, 98)">
+      <rect width="221" height="105" rx="10" fill="#022c22" stroke="#059669" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Strict Seniority Filter</text>
+      <text x="12" y="42" class="card-desc">Surfaces SDE-1, Fresher, Associate &amp; Intern roles</text>
+      <text x="12" y="60" class="card-desc" fill="#f87171">Permanently drops Senior, Staff, Lead &amp; II-VI</text>
+      <g transform="translate(12, 74)">
+        <rect width="68" height="18" rx="4" fill="#064e3b" />
+        <text x="34" y="12" text-anchor="middle" class="meta-tag" fill="#6ee7b7">Class of 2027</text>
+        <rect x="72" width="72" height="18" rx="4" fill="#064e3b" />
+        <text x="108" y="12" text-anchor="middle" class="meta-tag" fill="#6ee7b7">India / Remote</text>
+      </g>
+    </g>
+
+    <!-- Sub-card 2: Stack Scoring -->
+    <g transform="translate(12, 215)">
+      <rect width="221" height="110" rx="10" fill="#022c22" stroke="#059669" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Stack Relevance (0–100)</text>
+      <text x="12" y="42" class="card-desc">Calculates bounded 0–100 match against target profile</text>
+      <g transform="translate(12, 72)">
+        <rect width="68" height="18" rx="4" fill="#064e3b" />
+        <text x="34" y="12" text-anchor="middle" class="meta-tag" fill="#6ee7b7">Java / Spring 3</text>
+        <rect x="72" width="40" height="18" rx="4" fill="#064e3b" />
+        <text x="92" y="12" text-anchor="middle" class="meta-tag" fill="#6ee7b7">MERN</text>
+        <rect x="116" width="42" height="18" rx="4" fill="#064e3b" />
+        <text x="137" y="12" text-anchor="middle" class="meta-tag" fill="#6ee7b7">Kafka</text>
+        <rect x="162" width="44" height="18" rx="4" fill="#064e3b" />
+        <text x="184" y="12" text-anchor="middle" class="meta-tag" fill="#6ee7b7">Docker</text>
+      </g>
+    </g>
+
+    <!-- Sub-card 3: Deadlines & Expiry -->
+    <g transform="translate(12, 337)">
+      <rect width="221" height="115" rx="10" fill="#022c22" stroke="#059669" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Deadlines &amp; Auto-Expiry</text>
+      <text x="12" y="42" class="card-desc">Regex extracts start &amp; closing dates from descriptions</text>
+      <text x="12" y="60" class="card-desc" fill="#34d399">Past-deadline roles expire automatically</text>
+      <g transform="translate(12, 76)">
+        <rect width="92" height="18" rx="4" fill="#064e3b" />
+        <text x="46" y="12" text-anchor="middle" class="meta-tag" fill="#6ee7b7">Two-Stage Expiry</text>
+        <rect x="96" width="98" height="18" rx="4" fill="#064e3b" />
+        <text x="145" y="12" text-anchor="middle" class="meta-tag" fill="#6ee7b7">Candidate Safe</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Flow Connector 2 -> 3 -->
+  <path d="M 580 382 L 618 382" class="flow-line" stroke="#34d399" marker-end="url(#arrow-green)" />
+
+  <!-- STAGE 3: HYBRID STORAGE & SYNC -->
+  <g transform="translate(620, 145)">
+    <rect width="245" height="475" rx="14" fill="url(#card-purple)" stroke="#7c3aed" stroke-width="1.5" filter="url(#drop-shadow)" />
+    <rect x="14" y="14" width="75" height="22" rx="6" fill="#7c3aed" />
+    <text x="51" y="29" text-anchor="middle" class="badge-text" fill="#ffffff">STAGE 3</text>
+    <text x="14" y="58" class="col-title" fill="#c084fc">Persistence &amp; Sync</text>
+    <text x="14" y="75" class="card-desc">Unified local &amp; cloud state</text>
+    <line x1="14" y1="85" x2="231" y2="85" stroke="#6b21a8" stroke-width="1" stroke-opacity="0.6" />
+
+    <!-- Sub-card 1: Local SQLite -->
+    <g transform="translate(12, 98)">
+      <rect width="221" height="105" rx="10" fill="#2e1065" stroke="#7c3aed" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Local SQLite Engine</text>
+      <text x="12" y="42" class="card-desc">gcc_jobs.db provides microsecond fast lookups</text>
+      <g transform="translate(12, 68)">
+        <rect width="65" height="18" rx="4" fill="#3b0764" />
+        <text x="32" y="12" text-anchor="middle" class="meta-tag" fill="#d8b4fe">seen_jobs</text>
+        <rect x="69" width="68" height="18" rx="4" fill="#3b0764" />
+        <text x="103" y="12" text-anchor="middle" class="meta-tag" fill="#d8b4fe">dispatched</text>
+        <rect x="141" width="68" height="18" rx="4" fill="#3b0764" />
+        <text x="175" y="12" text-anchor="middle" class="meta-tag" fill="#d8b4fe">dormant</text>
+      </g>
+    </g>
+
+    <!-- Sub-card 2: Sync Engine -->
+    <g transform="translate(12, 215)">
+      <rect width="221" height="110" rx="10" fill="#2e1065" stroke="#7c3aed" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Turso Sync Engine</text>
+      <text x="12" y="42" class="card-desc">turso_sync.py connects via pure-Python Hrana HTTP</text>
+      <g transform="translate(12, 72)">
+        <rect width="68" height="18" rx="4" fill="#3b0764" />
+        <text x="34" y="12" text-anchor="middle" class="meta-tag" fill="#d8b4fe">--pull start</text>
+        <rect x="72" width="74" height="18" rx="4" fill="#3b0764" />
+        <text x="109" y="12" text-anchor="middle" class="meta-tag" fill="#d8b4fe">--push finish</text>
+        <rect x="150" width="58" height="18" rx="4" fill="#3b0764" />
+        <text x="179" y="12" text-anchor="middle" class="meta-tag" fill="#d8b4fe">--status</text>
+      </g>
+    </g>
+
+    <!-- Sub-card 3: Turso Cloud -->
+    <g transform="translate(12, 337)">
+      <rect width="221" height="115" rx="10" fill="#2e1065" stroke="#7c3aed" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Turso Cloud Database</text>
+      <text x="12" y="42" class="card-desc">Serverless libSQL cloud database (AWS Mumbai)</text>
+      <text x="12" y="60" class="card-desc" fill="#c084fc">No cache eviction loss • Zero duplicate alerts</text>
+      <g transform="translate(12, 76)">
+        <rect width="90" height="18" rx="4" fill="#3b0764" />
+        <text x="45" y="12" text-anchor="middle" class="meta-tag" fill="#d8b4fe">CI + Local Sync</text>
+        <rect x="94" width="102" height="18" rx="4" fill="#3b0764" />
+        <text x="145" y="12" text-anchor="middle" class="meta-tag" fill="#d8b4fe">Always Persisted</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Flow Connector 3 -> 4 -->
+  <path d="M 865 382 L 903 382" class="flow-line" stroke="#c084fc" marker-end="url(#arrow-purple)" />
+
+  <!-- STAGE 4: ALERTS & INTERFACES -->
+  <g transform="translate(905, 145)">
+    <rect width="245" height="475" rx="14" fill="url(#card-orange)" stroke="#ea580c" stroke-width="1.5" filter="url(#drop-shadow)" />
+    <rect x="14" y="14" width="75" height="22" rx="6" fill="#ea580c" />
+    <text x="51" y="29" text-anchor="middle" class="badge-text" fill="#ffffff">STAGE 4</text>
+    <text x="14" y="58" class="col-title" fill="#fb923c">Alerts &amp; Action</text>
+    <text x="14" y="75" class="card-desc">Instant delivery &amp; application prep</text>
+    <line x1="14" y1="85" x2="231" y2="85" stroke="#c2410c" stroke-width="1" stroke-opacity="0.6" />
+
+    <!-- Sub-card 1: Telegram Bot -->
+    <g transform="translate(12, 98)">
+      <rect width="221" height="105" rx="10" fill="#431407" stroke="#ea580c" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Interactive Telegram Bot</text>
+      <text x="12" y="42" class="card-desc">Mobile push cards with 1-click status actions</text>
+      <g transform="translate(12, 68)">
+        <rect width="52" height="18" rx="4" fill="#7c2d12" />
+        <text x="26" y="12" text-anchor="middle" class="meta-tag" fill="#fed7aa">/scan</text>
+        <rect x="56" width="52" height="18" rx="4" fill="#7c2d12" />
+        <text x="82" y="12" text-anchor="middle" class="meta-tag" fill="#fed7aa">/apply</text>
+        <rect x="112" width="52" height="18" rx="4" fill="#7c2d12" />
+        <text x="138" y="12" text-anchor="middle" class="meta-tag" fill="#fed7aa">/latest</text>
+        <rect x="168" width="40" height="18" rx="4" fill="#7c2d12" />
+        <text x="188" y="12" text-anchor="middle" class="meta-tag" fill="#fed7aa">/stats</text>
+      </g>
+    </g>
+
+    <!-- Sub-card 2: Discord & Digest -->
+    <g transform="translate(12, 215)">
+      <rect width="221" height="110" rx="10" fill="#431407" stroke="#ea580c" stroke-width="1" />
+      <text x="12" y="24" class="card-title">Consolidated Digests</text>
+      <text x="12" y="42" class="card-desc">4-hour batched digests sent to Discord &amp; Telegram</text>
+      <g transform="translate(12, 72)">
+        <rect width="90" height="18" rx="4" fill="#7c2d12" />
+        <text x="45" y="12" text-anchor="middle" class="meta-tag" fill="#fed7aa">Discord Webhook</text>
+        <rect x="94" width="102" height="18" rx="4" fill="#7c2d12" />
+        <text x="145" y="12" text-anchor="middle" class="meta-tag" fill="#fed7aa">Telegram Digest</text>
+      </g>
+    </g>
+
+    <!-- Sub-card 3: AI Resume & Agent -->
+    <g transform="translate(12, 337)">
+      <rect width="221" height="115" rx="10" fill="#431407" stroke="#ea580c" stroke-width="1" />
+      <text x="12" y="24" class="card-title">AI Agent &amp; Resume Tailor</text>
+      <text x="12" y="42" class="card-desc">Groq LPU / Gemini / OpenAI + ATS LaTeX builder</text>
+      <g transform="translate(12, 76)">
+        <rect width="88" height="18" rx="4" fill="#7c2d12" />
+        <text x="44" y="12" text-anchor="middle" class="meta-tag" fill="#fed7aa">LaTeX Tailoring</text>
+        <rect x="92" width="105" height="18" rx="4" fill="#7c2d12" />
+        <text x="144" y="12" text-anchor="middle" class="meta-tag" fill="#fed7aa">AI Career Advisor</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- BOTTOM BAR: ORCHESTRATION & RUNNERS -->
+  <g transform="translate(50, 638)">
+    <rect width="1100" height="88" rx="14" fill="url(#card-indigo)" stroke="#4f46e5" stroke-width="1.5" />
+    
+    <g transform="translate(20, 18)">
+      <rect width="36" height="36" rx="8" fill="#312e81" stroke="#818cf8" stroke-width="1" />
+      <text x="18" y="24" text-anchor="middle" font-size="18" fill="#ffffff">⚡</text>
+      <text x="48" y="24" font-family="system-ui, sans-serif" font-size="16" font-weight="700" fill="#ffffff">Automated Orchestration</text>
+      <text x="48" y="44" font-family="system-ui, sans-serif" font-size="12" fill="#94a3b8">Seamless execution across cloud schedules, local terminal, and persistent server environments</text>
+    </g>
+
+    <!-- Runner 1: GitHub Actions -->
+    <g transform="translate(540, 20)">
+      <rect width="170" height="48" rx="8" fill="#1e1b4b" stroke="#6366f1" stroke-width="1" />
+      <text x="14" y="20" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#e0e7ff">GitHub Actions</text>
+      <text x="14" y="36" font-family="system-ui, sans-serif" font-size="10.5" fill="#818cf8">Scheduled 4-Hour Cron</text>
+    </g>
+
+    <!-- Runner 2: Local CLI -->
+    <g transform="translate(725, 20)">
+      <rect width="170" height="48" rx="8" fill="#1e1b4b" stroke="#6366f1" stroke-width="1" />
+      <text x="14" y="20" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#e0e7ff">Local Terminal</text>
+      <text x="14" y="36" font-family="system-ui, sans-serif" font-size="10.5" fill="#818cf8">uv run gcc-job-radar</text>
+    </g>
+
+    <!-- Runner 3: Render Cloud -->
+    <g transform="translate(910, 20)">
+      <rect width="170" height="48" rx="8" fill="#1e1b4b" stroke="#6366f1" stroke-width="1" />
+      <text x="14" y="20" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#e0e7ff">Render Service</text>
+      <text x="14" y="36" font-family="system-ui, sans-serif" font-size="10.5" fill="#818cf8">Always-On Telegram Bot</text>
+    </g>
+  </g>
+</svg>
