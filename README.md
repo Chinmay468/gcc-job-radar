@@ -275,7 +275,20 @@ GCC Job Radar is engineered as a modular, event-driven, and multi-tier job intel
 
 ```mermaid
 flowchart TD
-    subgraph INGEST["1. Ingestion Tier"]
+    classDef ingest fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff;
+    classDef process fill:#16a34a,stroke:#4ade80,stroke-width:2px,color:#ffffff;
+    classDef storage fill:#7c3aed,stroke:#c084fc,stroke-width:2px,color:#ffffff;
+    classDef consumer fill:#ea580c,stroke:#fb923c,stroke-width:2px,color:#ffffff;
+    classDef orch fill:#4f46e5,stroke:#818cf8,stroke-width:2px,color:#ffffff;
+
+    subgraph ORCHESTRATION["⚡ 5. Execution & Orchestration"]
+        direction TB
+        E1["GitHub Actions 4-Hour Cron"]
+        E2["Local CLI & uv Runner"]
+        E3["Render Cloud Web Service"]
+    end
+
+    subgraph INGEST["📥 1. Ingestion Tier"]
         direction TB
         A1["ATS Connectors<br/>(Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Phenom, Amazon)"]
         A2["Multi-Account IMAP Alerts<br/>(LinkedIn, Naukri, Indeed, Glassdoor)"]
@@ -283,7 +296,7 @@ flowchart TD
         A4["Custom Career Scrapers<br/>(Flipkart TurboHire, SuccessFactors)"]
     end
 
-    subgraph PROCESS["2. Filtering & Evaluation Pipeline"]
+    subgraph PROCESS["⚙️ 2. Filtering & Evaluation Pipeline"]
         direction TB
         B1["URL Canonicalization & Unwrapping"]
         B2["Strict Role & Seniority Filtering<br/>(Entry-Level, Fresher, SDE-1 Only)"]
@@ -291,14 +304,14 @@ flowchart TD
         B4["Stack Relevance Scoring<br/>(0–100 Bounded Match Score)"]
     end
 
-    subgraph STORAGE["3. Hybrid Persistence Layer"]
+    subgraph STORAGE["💾 3. Hybrid Persistence Layer"]
         direction TB
         C1[("Local SQLite Database<br/>gcc_jobs.db")]
         C2["Turso Sync Engine<br/>(turso_sync.py • Hrana HTTP)"]
         C3[("Turso Cloud Database<br/>Serverless libSQL Replica")]
     end
 
-    subgraph CONSUMER["4. Consumer & Notification Tier"]
+    subgraph CONSUMER["🚀 4. Consumer & Notification Tier"]
         direction TB
         D1["Interactive Telegram Bot<br/>(Long-polling • Inline Actions • /apply)"]
         D2["Discord Webhook Notifier<br/>(Embed Cards • Deadline Badges)"]
@@ -307,19 +320,24 @@ flowchart TD
         D5["Resume Tailor Bridge<br/>(LaTeX ATS-Optimized Resume Tailoring)"]
     end
 
-    subgraph ORCHESTRATION["5. Execution & Orchestration"]
-        direction TB
-        E1["GitHub Actions 4-Hour Cron"]
-        E2["Local CLI & uv Runner"]
-        E3["Render Cloud Web Service"]
-    end
-
+    ORCHESTRATION -.-> INGEST
+    ORCHESTRATION -.-> STORAGE
     INGEST --> PROCESS
     PROCESS --> STORAGE
     C1 <--> C2 <--> C3
     STORAGE --> CONSUMER
-    ORCHESTRATION -.-> INGEST
-    ORCHESTRATION -.-> STORAGE
+
+    class A1,A2,A3,A4 ingest;
+    class B1,B2,B3,B4 process;
+    class C1,C2,C3 storage;
+    class D1,D2,D3,D4,D5 consumer;
+    class E1,E2,E3 orch;
+
+    style INGEST fill:#0c4a6e,stroke:#38bdf8,stroke-width:2px,color:#ffffff
+    style PROCESS fill:#064e3b,stroke:#4ade80,stroke-width:2px,color:#ffffff
+    style STORAGE fill:#3b0764,stroke:#c084fc,stroke-width:2px,color:#ffffff
+    style CONSUMER fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#ffffff
+    style ORCHESTRATION fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#ffffff
 ```
 
 ### Architectural Pillars
