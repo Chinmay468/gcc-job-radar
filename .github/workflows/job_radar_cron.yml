@@ -32,6 +32,8 @@ jobs:
       EMAIL_PASSWORD_2: ${{ secrets.EMAIL_PASSWORD_2 || secrets.EMAIL_PASSWORD2 }}
       EMAIL_USER_3: ${{ secrets.EMAIL_USER_3 || secrets.EMAIL_USER3 }}
       EMAIL_PASSWORD_3: ${{ secrets.EMAIL_PASSWORD_3 || secrets.EMAIL_PASSWORD3 }}
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -58,6 +60,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
+      - name: Sync from Turso Cloud Database
+        if: env.TURSO_DATABASE_URL != '' && env.TURSO_AUTH_TOKEN != ''
+        run: |
+          python -m gcc_job_radar.turso_sync --pull || echo "Turso pull warning"
+
       - name: Ingest Job Alert Emails
         if: env.EMAIL_USER != '' && env.EMAIL_PASSWORD != ''
         run: |
@@ -74,6 +81,11 @@ jobs:
           else
             gcc-job-radar $SCAN_ARGS
           fi
+
+      - name: Sync back to Turso Cloud Database
+        if: env.TURSO_DATABASE_URL != '' && env.TURSO_AUTH_TOKEN != ''
+        run: |
+          python -m gcc_job_radar.turso_sync --push || echo "Turso push warning"
 
 
       - name: Upload latest openings artifact

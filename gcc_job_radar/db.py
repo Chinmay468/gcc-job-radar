@@ -1471,6 +1471,39 @@ def mark_job_status(
                 )
         conn.commit()
 
+        # Synchronize status update to Turso cloud database if configured
+        try:
+            from gcc_job_radar.turso_sync import get_turso_client, is_turso_configured
+            if is_turso_configured():
+                turso_client = get_turso_client()
+                if turso_client:
+                    job_key_id = target_job.get("id")
+                    if status_norm == "APPLIED":
+                        if notes is not None:
+                            turso_client.execute(
+                                "UPDATE seen_jobs SET status = ?, applied_at = COALESCE(applied_at, ?), notes = ? WHERE id = ?",
+                                [status_norm, now_iso, notes, job_key_id],
+                            )
+                        else:
+                            turso_client.execute(
+                                "UPDATE seen_jobs SET status = ?, applied_at = COALESCE(applied_at, ?) WHERE id = ?",
+                                [status_norm, now_iso, job_key_id],
+                            )
+                    else:
+                        if notes is not None:
+                            turso_client.execute(
+                                "UPDATE seen_jobs SET status = ?, notes = ? WHERE id = ?",
+                                [status_norm, notes, job_key_id],
+                            )
+                        else:
+                            turso_client.execute(
+                                "UPDATE seen_jobs SET status = ? WHERE id = ?",
+                                [status_norm, job_key_id],
+                            )
+                    if hasattr(turso_client, "close"):
+                        turso_client.close()
+        except Exception as e:
+            logger.debug("Turso status sync skipped/failed: %s", e)
 
         if status_norm == "DISMISSED":
             jid = target_job.get("id") or str(target_rowid)

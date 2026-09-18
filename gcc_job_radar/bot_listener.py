@@ -1320,6 +1320,15 @@ async def run_bot_listener(
         # Sync official bot menu commands with Telegram API on startup
         await sync_telegram_bot_commands(bot_token, client)
 
+        # Sync latest state from Turso Cloud Database on startup
+        from gcc_job_radar.turso_sync import is_turso_configured, sync_turso
+        if is_turso_configured():
+            try:
+                sync_turso(db_path, direction="pull")
+                logger.info("Synced state from Turso cloud database on startup.")
+            except Exception as e:
+                logger.warning(f"Failed to sync with Turso on startup: {e}")
+
         # Purge any pre-existing invalid unreviewed records from earlier scans
         try:
             purge_invalid_jobs(db_path)

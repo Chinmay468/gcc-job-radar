@@ -47,6 +47,13 @@ from gcc_job_radar.filters import is_remote_opening
 from gcc_job_radar.models import ATSProvider, JobPosting
 from gcc_job_radar.notifier import dispatch_notifications
 from gcc_job_radar.relevance import score_job_posting
+from gcc_job_radar.turso_sync import (
+    get_sync_status,
+    is_turso_configured,
+    pull_from_turso,
+    push_to_turso,
+    sync_turso,
+)
 
 app = typer.Typer(
     name="gcc-job-radar",
@@ -276,6 +283,10 @@ def scan(
             )
             raise typer.Exit(code=1)
 
+    if is_turso_configured():
+        console.print("[dim]Syncing latest state from Turso Cloud Database...[/dim]")
+        sync_turso(db_path=db_path, direction="pull")
+
     render_banner(len(target_companies), provider=provider)
 
     with Progress(
@@ -356,6 +367,10 @@ def scan(
                 digest=digest,
             )
         )
+
+    if is_turso_configured():
+        console.print("[dim]Syncing scan results to Turso Cloud Database...[/dim]")
+        sync_turso(db_path=db_path, direction="push")
 
     if show_all:
         display_jobs = all_jobs
@@ -1035,6 +1050,59 @@ def deep_verify(
             db_path=db_path,
         )
     )
+
+
+@app.command("db-sync")
+def db_sync(
+    pull: bool = typer.Option(
+        False,
+        "--pull",
+        help="Pull data from Turso cloud database into local SQLite.",
+    ),
+    push: bool = typer.Option(
+        False,
+        "--push",
+        help="Push data from local SQLite into Turso cloud database.",
+    ),
+    status: bool = typer.Option(
+        False,
+        "--status",
+        help="Display comparison of table row counts between local and Turso.",
+    ),
+    db_path: Optional[Path] = typer.Option(
+        None,
+        "--db",
+        help="Custom path to SQLite database file.",
+    ),
+) -> None:
+    """Synchronize local SQLite database with Turso Cloud libSQL/SQLite."""
+    if not is_turso_configured():
+        console.print(
+            "[bold red]Error:[/bold red] Turso is not configured. Set [yellow]TURSO_DATABASE_URL[/yellow] and [yellow]TURSO_AUTH_TOKEN[/yellow] in environment or .env."
+        )
+        raise typer.Exit(code=1)
+
+    if status or (not pull and not push):
+        st = get_sync_status(db_path)
+        console.print(f"[bold green][Turso][/bold green] Database: [cyan]{st.get('database_url')}[/cyan]")
+        for tbl, counts in st.get("tables", {}).items():
+            console.print(f"  - [bold]{tbl}[/bold]: local={counts['local']}, turso={counts['turso']}")
+        if not pull and not push:
+            return
+
+    if pull:
+        console.print("[cyan][*][/cyan] Pulling data from Turso into local database...")
+        res = pull_from_turso(db_path)
+        console.print("[bold green][+][/bold green] Pull complete:")
+        for t, c in res.items():
+            console.print(f"  - {t}: {c} rows")
+
+    if push:
+        console.print("[cyan][*][/cyan] Pushing local data to Turso cloud database...")
+        res = push_to_turso(db_path)
+        console.print("[bold green][+][/bold green] Push complete:")
+        for t, c in res.items():
+            console.print(f"  - {t}: {c} rows")
 
 
 @app.callback(invoke_without_command=True)
