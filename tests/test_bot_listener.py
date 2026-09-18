@@ -952,7 +952,7 @@ async def test_sync_telegram_bot_commands() -> None:
         assert ok is True
         assert captured_payload is not None
         cmds = captured_payload.get("commands", [])
-        assert len(cmds) == 8
+        assert len(cmds) == 9
         cmd_names = [c["command"] for c in cmds]
         assert "scan" in cmd_names
         assert "latest" in cmd_names
@@ -961,6 +961,7 @@ async def test_sync_telegram_bot_commands() -> None:
         assert "applied" in cmd_names
         assert "followups" in cmd_names
         assert "stats" in cmd_names
+        assert "sync" in cmd_names
         assert "help" in cmd_names
 
 

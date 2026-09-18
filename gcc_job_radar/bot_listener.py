@@ -67,6 +67,7 @@ DEFAULT_MENU_COMMANDS: list[dict[str, str]] = [
     {"command": "applied", "description": "View your active applied roles"},
     {"command": "followups", "description": "View stale applications needing follow-up"},
     {"command": "stats", "description": "View database stats & pipeline"},
+    {"command": "sync", "description": "Sync database with Turso cloud (/sync [pull|push])"},
     {"command": "help", "description": "Show commands & AI usage guide"},
 ]
 
@@ -300,6 +301,7 @@ async def handle_command(
             "• <code>/applied</code> — View your active applied roles\n"
             "• <code>/followups</code> — View stale applications needing follow-up (7d+)\n"
             "• <code>/stats</code> — View database stats &amp; pipeline\n"
+            "• <code>/sync</code> — Sync database with Turso cloud (<code>/sync [pull|push]</code>)\n"
             "• <code>/help</code> — Show commands &amp; AI usage guide\n\n"
             "🎯 <b>Tracker &amp; Quick Actions:</b>\n"
             "• <code>/check &lt;name&gt;</code> — Check single company live (e.g. <code>/check celonis</code>)\n"
@@ -937,6 +939,58 @@ async def handle_command(
             logger.exception("Error syncing email alerts")
             clean_err = re.sub(r"\[/?(bold|dim|cyan|red)[^\]]*\]", "", str(exc))
             reply = f"❌ Error checking email accounts: {html.escape(clean_err)}"
+        await send_telegram_reply(bot_token, chat_id, reply, client)
+
+    elif cmd in ("/sync", "/dbsync"):
+        from gcc_job_radar.turso_sync import is_turso_configured, sync_turso
+        if not is_turso_configured():
+            reply = (
+                "⚠️ <b>Turso Cloud Database Not Configured</b>\n\n"
+                "Cloud synchronization requires Turso credentials.\n\n"
+                "Please configure these environment variables in your <b>Render Dashboard</b> (Environment tab):\n"
+                "• <code>TURSO_DATABASE_URL</code>\n"
+                "• <code>TURSO_AUTH_TOKEN</code>\n\n"
+                "<i>Once saved, the bot automatically syncs your applications &amp; dismissals!</i>"
+            )
+            await send_telegram_reply(bot_token, chat_id, reply, client)
+            return
+
+        direction = "push" if arg.strip().lower() in ("push", "upload") else "pull"
+        await send_telegram_reply(
+            bot_token,
+            chat_id,
+            f"🔄 <i>Syncing with Turso cloud database (direction: <b>{direction.upper()}</b>)...</i>",
+            client,
+        )
+
+        try:
+            res = await asyncio.to_thread(sync_turso, db_path=db_path, direction=direction)
+            if res.get("status") == "error":
+                reply = f"❌ <b>Turso Sync Failed:</b> {html.escape(str(res.get('error')))}"
+            else:
+                stats = get_stats(db_path)
+                total = stats.get("total_tracked", 0)
+                applied = stats.get("applied_count", 0)
+                dismissed = stats.get("dismissed_count", 0)
+                table_stats = res.get("stats", {})
+
+                synced_summary = ", ".join(f"<code>{k}</code>: {v}" for k, v in table_stats.items() if v > 0)
+                if not synced_summary:
+                    synced_summary = "All tables up to date"
+
+                reply = (
+                    f"✅ <b>Turso Cloud Sync Completed!</b>\n\n"
+                    f"• <b>Direction:</b> <code>{direction.upper()}</code>\n"
+                    f"• <b>Tables Synced:</b> {synced_summary}\n\n"
+                    f"📊 <b>Current Local State:</b>\n"
+                    f"• <b>Total Roles Tracked:</b> {total}\n"
+                    f"• <b>Applied:</b> {applied}\n"
+                    f"• <b>Dismissed:</b> {dismissed}"
+                )
+        except Exception as exc:
+            logger.exception("Manual Turso sync error: %s", exc)
+            reply = f"❌ <b>Turso Sync Error:</b> {html.escape(str(exc))}"
+
         await send_telegram_reply(bot_token, chat_id, reply, client)
 
     else:

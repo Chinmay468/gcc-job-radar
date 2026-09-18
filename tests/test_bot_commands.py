@@ -574,3 +574,64 @@ def test_format_jobs_html_ranked_recommendations() -> None:
     assert "reply <code>/latest all</code> or search by company to view" in html_out
 
 
+@pytest.mark.asyncio
+async def test_handle_command_sync_unconfigured(test_db_with_jobs: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify /sync returns informative message when Turso credentials are not configured."""
+    monkeypatch.delenv("TURSO_DATABASE_URL", raising=False)
+    monkeypatch.delenv("TURSO_AUTH_TOKEN", raising=False)
+
+    replies = []
+    async def mock_send_reply(token, cid, text, client, reply_markup=None):
+        replies.append(text)
+        return True
+
+    client = AsyncMock(spec=httpx.AsyncClient)
+
+    with patch("gcc_job_radar.bot_listener.send_telegram_reply", side_effect=mock_send_reply):
+        await handle_command(
+            command_text="/sync",
+            chat_id="12345",
+            bot_token="test_token",
+            allowed_chat_id="12345",
+            client=client,
+            db_path=test_db_with_jobs,
+        )
+
+    assert any("Turso Cloud Database Not Configured" in r for r in replies)
+
+
+@pytest.mark.asyncio
+async def test_handle_command_sync_success(test_db_with_jobs: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify /sync executes sync_turso and displays updated statistics."""
+    monkeypatch.setenv("TURSO_DATABASE_URL", "https://example.turso.io")
+    monkeypatch.setenv("TURSO_AUTH_TOKEN", "mock_token")
+    monkeypatch.setenv("TURSO_FORCE_SYNC", "1")
+
+    replies = []
+    async def mock_send_reply(token, cid, text, client, reply_markup=None):
+        replies.append(text)
+        return True
+
+    client = AsyncMock(spec=httpx.AsyncClient)
+
+    mock_sync_result = {
+        "status": "success",
+        "direction": "pull",
+        "stats": {"seen_jobs": 10, "dispatched_alerts": 5},
+    }
+
+    with patch("gcc_job_radar.bot_listener.send_telegram_reply", side_effect=mock_send_reply), \
+         patch("gcc_job_radar.turso_sync.sync_turso", return_value=mock_sync_result):
+        await handle_command(
+            command_text="/sync",
+            chat_id="12345",
+            bot_token="test_token",
+            allowed_chat_id="12345",
+            client=client,
+            db_path=test_db_with_jobs,
+        )
+
+    assert any("Turso Cloud Sync Completed!" in r for r in replies)
+    assert any("seen_jobs" in r for r in replies)
+
+
