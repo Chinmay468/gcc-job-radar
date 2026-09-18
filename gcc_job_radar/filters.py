@@ -1,6 +1,7 @@
+from datetime import date, datetime, timezone
 import html
 import re
-from typing import Optional
+from typing import Any, Optional, Union
 from gcc_job_radar.config import (
     EXCLUDE_TITLE_PATTERN,
     INCLUDE_TITLE_PATTERN,
@@ -526,4 +527,221 @@ def is_entry_level(
                 return False
 
     return True
+
+
+# ---------------------------------------------------------------------------
+# Application Date & Deadline Extraction & Expiration Helpers
+# ---------------------------------------------------------------------------
+
+MONTH_MAP: dict[str, int] = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7,
+    "aug": 8, "august": 8, "sep": 9, "september": 9, "oct": 10, "october": 10,
+    "nov": 11, "november": 11, "dec": 12, "december": 12,
+}
+
+_DEADLINE_PATTERNS = [
+    re.compile(
+        r"""(?ix)
+        \b(?:
+            last\s+date(?:\s+to\s+apply)? |
+            application\s+deadline |
+            apply\s+(?:before|by) |
+            closing\s+date |
+            registration\s+ends? |
+            closes?\s+on |
+            deadline\s*(?:to\s+apply)? |
+            end\s+date
+        )\b
+        \s*[:\-–—]?\s*
+        ([^\n\r;<|•]+)
+        """
+    ),
+    re.compile(
+        r"""(?ix)
+        \b(?:apply\s+by|closes\s+on|registration\s+ends)\s+
+        ([0-9]{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+[,\s\-]+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2}(?:st|nd|rd|th)?[,\s\-]+[0-9]{4}|[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[-/][0-9]{1,2}[-/][0-9]{4})
+        """
+    ),
+]
+
+_START_DATE_PATTERNS = [
+    re.compile(
+        r"""(?ix)
+        \b(?:
+            start\s+date |
+            posted\s+(?:on|date)? |
+            registration\s+starts? |
+            opening\s+date |
+            published\s+(?:on|date)? |
+            applications?\s+open
+        )\b
+        \s*[:\-–—]?\s*
+        ([^\n\r;<|•]+)
+        """
+    ),
+]
+
+
+def normalize_date_str(val: Any, default_year: Optional[int] = None) -> Optional[str]:
+    """Normalize various date representations into ISO YYYY-MM-DD format.
+
+    Handles:
+    - ISO timestamps: '2026-09-30', '2026-09-30T18:30:00.000Z'
+    - Slash/dash dates: '30/09/2026', '30-09-2026', '09/30/2026'
+    - Verbal dates: '30 Sep 2026', 'September 30, 2026', '30th September, 2026', '15-Oct-2026'
+    - Dates without explicit year: 'Sep 30', '30 Sep' (defaults to current year)
+    """
+    if not val:
+        return None
+    val_str = str(val).strip()
+    if val_str.lower() in ("recent", "active", "none", "n/a", "null", ""):
+        return None
+
+    # 1. ISO format: 2026-09-30 or 2026-09-30T...
+    m_iso = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})", val_str)
+    if m_iso:
+        try:
+            d = date(int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3)))
+            return d.isoformat()
+        except ValueError:
+            pass
+
+    # 2. DD/MM/YYYY or DD-MM-YYYY or MM/DD/YYYY
+    m_dmy = re.search(r"\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})\b", val_str)
+    if m_dmy:
+        p1, p2, yr = int(m_dmy.group(1)), int(m_dmy.group(2)), int(m_dmy.group(3))
+        if p1 > 12 and p2 <= 12:
+            d_val, m_val = p1, p2
+        elif p2 > 12 and p1 <= 12:
+            d_val, m_val = p2, p1
+        else:
+            d_val, m_val = p1, p2
+        try:
+            return date(yr, m_val, d_val).isoformat()
+        except ValueError:
+            pass
+
+    clean = re.sub(r"(\d+)(?:st|nd|rd|th)\b", r"\1", val_str, flags=re.IGNORECASE)
+
+    # 3. Month DD, YYYY or Month DD YYYY
+    m_mdy = re.search(r"\b([A-Za-z]{3,9})\s+(\d{1,2})[,\s\-]+(\d{4})\b", clean)
+    if m_mdy:
+        m_name = m_mdy.group(1).lower()
+        if m_name in MONTH_MAP:
+            try:
+                return date(int(m_mdy.group(3)), MONTH_MAP[m_name], int(m_mdy.group(2))).isoformat()
+            except ValueError:
+                pass
+
+    # 4. DD Month YYYY or DD-Month-YYYY
+    m_dmy_verbal = re.search(r"\b(\d{1,2})[- \s]+([A-Za-z]{3,9})[,\s\-]+(\d{4})\b", clean)
+    if m_dmy_verbal:
+        m_name = m_dmy_verbal.group(2).lower()
+        if m_name in MONTH_MAP:
+            try:
+                return date(int(m_dmy_verbal.group(3)), MONTH_MAP[m_name], int(m_dmy_verbal.group(1))).isoformat()
+            except ValueError:
+                pass
+
+    cur_year = default_year or datetime.now(timezone.utc).year
+
+    # 5. Month DD without year: 'Sep 30', 'October 5'
+    m_md_noyear = re.search(r"\b([A-Za-z]{3,9})\s+(\d{1,2})\b", clean)
+    if m_md_noyear:
+        m_name = m_md_noyear.group(1).lower()
+        if m_name in MONTH_MAP:
+            try:
+                return date(cur_year, MONTH_MAP[m_name], int(m_md_noyear.group(2))).isoformat()
+            except ValueError:
+                pass
+
+    # 6. DD Month without year: '30 Sep', '15 October'
+    m_dm_noyear = re.search(r"\b(\d{1,2})[- \s]+([A-Za-z]{3,9})\b", clean)
+    if m_dm_noyear:
+        m_name = m_dm_noyear.group(2).lower()
+        if m_name in MONTH_MAP:
+            try:
+                return date(cur_year, MONTH_MAP[m_name], int(m_dm_noyear.group(1))).isoformat()
+            except ValueError:
+                pass
+
+    return None
+
+
+def is_date_expired(
+    date_val: Optional[Union[str, date, datetime]],
+    ref_date: Optional[Union[str, date, datetime]] = None,
+) -> bool:
+    """Check if an application closing date or deadline has strictly passed."""
+    if not date_val:
+        return False
+
+    if isinstance(date_val, datetime):
+        d = date_val.date()
+    elif isinstance(date_val, date):
+        d = date_val
+    else:
+        norm = normalize_date_str(date_val)
+        if not norm:
+            return False
+        try:
+            d = date.fromisoformat(norm)
+        except ValueError:
+            return False
+
+    if ref_date is None:
+        target_ref = datetime.now(timezone.utc).date()
+    elif isinstance(ref_date, datetime):
+        target_ref = ref_date.date()
+    elif isinstance(ref_date, date):
+        target_ref = ref_date
+    else:
+        ref_norm = normalize_date_str(ref_date)
+        if ref_norm:
+            try:
+                target_ref = date.fromisoformat(ref_norm)
+            except ValueError:
+                target_ref = datetime.now(timezone.utc).date()
+        else:
+            target_ref = datetime.now(timezone.utc).date()
+
+    return d < target_ref
+
+
+def extract_application_dates(
+    text: Optional[str],
+    published_date: Optional[str] = None,
+) -> tuple[Optional[str], Optional[str]]:
+    """Extract (application_start_date, application_end_date) in ISO format (YYYY-MM-DD).
+
+    Scans text/notes/descriptions for start dates, registration dates, posted dates,
+    and application deadlines/closing dates.
+    Falls back to published_date for application_start_date when not explicitly found in text.
+    """
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+    if text and text.strip():
+        for pat in _DEADLINE_PATTERNS:
+            m = pat.search(text)
+            if m:
+                cand = normalize_date_str(m.group(1))
+                if cand:
+                    end_date = cand
+                    break
+
+        for pat in _START_DATE_PATTERNS:
+            m = pat.search(text)
+            if m:
+                cand = normalize_date_str(m.group(1))
+                if cand:
+                    start_date = cand
+                    break
+
+    if not start_date and published_date:
+        start_date = normalize_date_str(published_date)
+
+    return (start_date, end_date)
+
 

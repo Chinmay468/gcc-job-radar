@@ -360,6 +360,144 @@ def test_cross_platform_duplicate_preserves_applied_status(tmp_path: Path) -> No
     assert "jobs.lever.co" in saved_job["apply_url"]
 
 
+def test_application_dates_persistence_and_prune_expired(tmp_path: Path) -> None:
+    """Verify application start and end dates are persisted, and prune_expired_jobs marks past deadlines as EXPIRED."""
+    from gcc_job_radar.db import (
+        filter_new_jobs,
+        filter_unalerted_jobs,
+        get_latest_jobs,
+        init_db,
+        prune_expired_jobs,
+        record_jobs,
+    )
+    from gcc_job_radar.models import ATSProvider, JobPosting
+
+    db_file = tmp_path / "test_dates_prune.db"
+    init_db(db_file)
+
+    # 1. Job with active future deadline
+    active_job = JobPosting(
+        id="job_active_1",
+        company="Snowflake",
+        title="Associate Software Engineer",
+        location="Bengaluru",
+        apply_url="https://jobs.ashbyhq.com/snowflake/1",
+        provider=ATSProvider.ASHBY,
+        published_date="2026-09-01",
+        application_start_date="2026-09-01",
+        application_end_date="2026-10-15",
+        status="NEW",
+    )
+
+    # 1. Job with active future deadline
+    active_job = JobPosting(
+        id="job_active_1",
+        company="Snowflake",
+        title="Associate Software Engineer",
+        location="Bengaluru",
+        apply_url="https://jobs.ashbyhq.com/snowflake/1",
+        provider=ATSProvider.ASHBY,
+        published_date="2026-09-01",
+        application_start_date="2026-09-01",
+        application_end_date="2026-10-15",
+        status="NEW",
+    )
+
+    # 2. Job with deadline in near future (active now, but will expire by Oct 1)
+    expiring_job = JobPosting(
+        id="job_expiring_2",
+        company="OldCo",
+        title="Junior Java Developer",
+        location="Pune",
+        apply_url="https://boards.greenhouse.io/oldco/2",
+        provider=ATSProvider.GREENHOUSE,
+        published_date="2026-08-01",
+        application_start_date="2026-08-01",
+        application_end_date="2026-09-25",
+        status="NEW",
+    )
+
+    # 3. Applied job with deadline in near future
+    applied_expiring_job = JobPosting(
+        id="job_applied_3",
+        company="AppliedCo",
+        title="SDE 1",
+        location="Bengaluru",
+        apply_url="https://jobs.lever.co/appliedco/3",
+        provider=ATSProvider.LEVER,
+        published_date="2026-08-01",
+        application_start_date="2026-08-01",
+        application_end_date="2026-09-25",
+        status="APPLIED",
+    )
+
+    # 4. Job that is ALREADY expired when scraped
+    already_expired = JobPosting(
+        id="job_past_4",
+        company="PastCo",
+        title="Software Intern",
+        location="Remote",
+        apply_url="https://jobs.lever.co/pastco/4",
+        provider=ATSProvider.LEVER,
+        published_date="2026-08-01",
+        application_start_date="2026-08-01",
+        application_end_date="2026-09-05",
+        status="NEW",
+    )
+
+    record_jobs([active_job, expiring_job, applied_expiring_job, already_expired], db_path=db_file)
+
+    # Verify dates were persisted and already_expired was immediately marked EXPIRED
+    all_jobs = get_latest_jobs(status="ALL", db_path=db_file)
+    assert len(all_jobs) == 4
+    active_record = next(j for j in all_jobs if j["company"] == "Snowflake")
+    assert active_record["application_start_date"] == "2026-09-01"
+    assert active_record["application_end_date"] == "2026-10-15"
+    assert active_record["status"] == "NEW"
+    assert active_record["is_active"] == 1
+
+    past_record = next(j for j in all_jobs if j["company"] == "PastCo")
+    assert past_record["status"] == "EXPIRED"
+    assert past_record["is_active"] == 0
+
+    expiring_record = next(j for j in all_jobs if j["company"] == "OldCo")
+    assert expiring_record["status"] == "NEW"
+    assert expiring_record["is_active"] == 1
+
+    applied_record = next(j for j in all_jobs if j["company"] == "AppliedCo")
+    assert applied_record["status"] == "APPLIED"
+    assert applied_record["is_active"] == 1
+
+    # Fast forward time to Oct 1: prune_expired_jobs should expire expiring_job and deactivate applied_expiring_job
+    pruned_count = prune_expired_jobs(db_path=db_file, ref_date="2026-10-01")
+    assert pruned_count == 2  # OldCo + AppliedCo
+
+    # Check statuses after pruning
+    latest_all = get_latest_jobs(status="ALL", db_path=db_file)
+    pruned_oldco = next(j for j in latest_all if j["company"] == "OldCo")
+    assert pruned_oldco["status"] == "EXPIRED"
+    assert pruned_oldco["is_active"] == 0
+
+    pruned_applied = next(j for j in latest_all if j["company"] == "AppliedCo")
+    assert pruned_applied["status"] == "APPLIED"  # Status preserved!
+    assert pruned_applied["is_active"] == 0
+
+    # get_latest_jobs with default NEW should only return active_job (Snowflake)
+    latest_new = get_latest_jobs(status="NEW", db_path=db_file)
+    assert len(latest_new) == 1
+    assert latest_new[0]["company"] == "Snowflake"
+
+    # filter_new_jobs should not surface expired roles as new
+    new_jobs, existing_jobs = filter_new_jobs([already_expired, expiring_job], db_path=db_file)
+    assert len(new_jobs) == 0
+    assert len(existing_jobs) == 2
+
+    # filter_unalerted_jobs should discard expired roles
+    unalerted = filter_unalerted_jobs([already_expired, active_job], "telegram", db_path=db_file)
+    assert len(unalerted) == 1
+    assert unalerted[0].id == "job_active_1"
+
+
 
 
 

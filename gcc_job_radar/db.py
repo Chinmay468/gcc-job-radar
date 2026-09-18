@@ -198,6 +198,77 @@ def purge_invalid_jobs(db_path: Optional[Path] = None) -> int:
         return len(invalid_ids)
 
 
+def prune_expired_jobs(
+    db_path: Optional[Path] = None,
+    ref_date: Optional[str] = None,
+) -> int:
+    """Mark job postings whose application end date / deadline has passed as EXPIRED and inactive.
+
+    For candidate records already marked APPLIED, INTERVIEWING, or REJECTED, preserves
+    the status for application tracking history, but sets is_active = 0.
+    For all unapplied records (e.g. status = 'NEW'), sets status = 'EXPIRED' and is_active = 0.
+
+    Returns:
+        int: Total number of records pruned / updated.
+    """
+    init_db(db_path)
+    target_path = get_db_path(db_path)
+    if not target_path.exists():
+        return 0
+
+    from gcc_job_radar.filters import normalize_date_str
+
+    if ref_date is None:
+        compare_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    else:
+        norm = normalize_date_str(ref_date)
+        compare_date = norm if norm else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    with sqlite3.connect(target_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='seen_jobs'")
+        if not cursor.fetchone():
+            return 0
+
+        cursor.execute("PRAGMA table_info(seen_jobs)")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "application_end_date" not in cols:
+            return 0
+
+        # 1. Update NEW / unapplied jobs to EXPIRED and inactive
+        cursor.execute(
+            """
+            UPDATE seen_jobs
+            SET status = 'EXPIRED', is_active = 0
+            WHERE application_end_date IS NOT NULL
+              AND trim(application_end_date) != ''
+              AND date(application_end_date) < date(?)
+              AND status != 'EXPIRED'
+              AND status NOT IN ('APPLIED', 'INTERVIEWING', 'REJECTED')
+            """,
+            (compare_date,),
+        )
+        expired_count = cursor.rowcount
+
+        # 2. Deactivate active applied/interviewing/rejected jobs without changing their tracking status
+        cursor.execute(
+            """
+            UPDATE seen_jobs
+            SET is_active = 0
+            WHERE application_end_date IS NOT NULL
+              AND trim(application_end_date) != ''
+              AND date(application_end_date) < date(?)
+              AND is_active = 1
+              AND status IN ('APPLIED', 'INTERVIEWING', 'REJECTED')
+            """,
+            (compare_date,),
+        )
+        deactivated_applied_count = cursor.rowcount
+        conn.commit()
+
+    return expired_count + deactivated_applied_count
+
+
 def init_db(db_path: Optional[Path] = None) -> None:
     """Initialize SQLite database tables, indexes, and run deduplication cleanup."""
     target_path = get_db_path(db_path)
@@ -215,6 +286,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 apply_url TEXT NOT NULL,
                 provider TEXT NOT NULL,
                 published_date TEXT,
+                application_start_date TEXT,
+                application_end_date TEXT,
                 is_active INTEGER DEFAULT 1,
                 is_remote INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'NEW',
@@ -247,8 +320,13 @@ def init_db(db_path: Optional[Path] = None) -> None:
                     cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN direct_search_url TEXT NULL")
                 if "relevance_score" not in columns:
                     cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN relevance_score INTEGER DEFAULT 0")
+                if "application_start_date" not in columns:
+                    cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN application_start_date TEXT NULL")
+                if "application_end_date" not in columns:
+                    cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN application_end_date TEXT NULL")
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_seen_jobs_status ON seen_jobs(status);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_seen_jobs_end_date ON seen_jobs(application_end_date);")
         # Recreate jobs view to expose direct_search_url and rowid as numeric_id
         cursor.execute("DROP VIEW IF EXISTS jobs;")
         cursor.execute("CREATE VIEW jobs AS SELECT rowid AS numeric_id, * FROM seen_jobs;")
@@ -560,6 +638,8 @@ def filter_unalerted_jobs(
     raw_ids = [str(j.id) for j in jobs]
     id_placeholders = ",".join("?" for _ in (keys + raw_ids))
 
+    from gcc_job_radar.filters import is_date_expired
+
     with sqlite3.connect(target_path) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -572,7 +652,7 @@ def filter_unalerted_jobs(
             """
             SELECT id, lower(apply_url), lower(company), lower(title), status
             FROM seen_jobs
-            WHERE status IN ('DISMISSED', 'APPLIED')
+            WHERE status IN ('DISMISSED', 'APPLIED', 'EXPIRED')
             """
         )
         suppressed_rows = cursor.fetchall()
@@ -588,7 +668,9 @@ def filter_unalerted_jobs(
         sem_k = (j.company.lower().strip(), j.title.lower().strip())
         status = getattr(j, "status", "NEW").upper()
 
-        if status in ("DISMISSED", "APPLIED"):
+        if status in ("DISMISSED", "APPLIED", "EXPIRED") or getattr(j, "is_expired", False):
+            continue
+        if j.application_end_date and is_date_expired(j.application_end_date):
             continue
         if k in sent_ids or raw_id in sent_ids:
             continue
@@ -656,6 +738,8 @@ def filter_new_jobs(
     if not jobs:
         return [], []
 
+    from gcc_job_radar.filters import is_date_expired
+
     with sqlite3.connect(target_path) as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -665,10 +749,10 @@ def filter_new_jobs(
         seen_ids = {r[0] for r in records}
         seen_urls = {r[1] for r in records if r[1]}
         seen_semantic = {(r[2], r[3], r[4]) for r in records}
-        # Dismissed jobs must never re-surface as new — treat them as permanently seen
-        dismissed_ids = {r[0] for r in records if r[5] and r[5].upper() == "DISMISSED"}
-        dismissed_urls = {r[1] for r in records if r[1] and r[5] and r[5].upper() == "DISMISSED"}
-        dismissed_semantic = {(r[2], r[3], r[4]) for r in records if r[5] and r[5].upper() == "DISMISSED"}
+        # Dismissed and expired jobs must never re-surface as new — treat them as permanently seen
+        dismissed_ids = {r[0] for r in records if r[5] and r[5].upper() in ("DISMISSED", "EXPIRED")}
+        dismissed_urls = {r[1] for r in records if r[1] and r[5] and r[5].upper() in ("DISMISSED", "EXPIRED")}
+        dismissed_semantic = {(r[2], r[3], r[4]) for r in records if r[5] and r[5].upper() in ("DISMISSED", "EXPIRED")}
 
     new_jobs: list[JobPosting] = []
     existing_jobs: list[JobPosting] = []
@@ -685,8 +769,17 @@ def filter_new_jobs(
         title_lower = job.title.lower().strip()
         loc_lower = job.location.lower().strip()
 
-        # Fast-path: if this posting matches any dismissed record, treat as existing (never resurface)
+        # Fast-path: if this posting matches any dismissed or expired record, treat as existing (never resurface)
         if key in dismissed_ids or clean_url in dismissed_urls or sem_key in dismissed_semantic:
+            existing_jobs.append(job)
+            continue
+
+        # Fast-path: if this posting has an expired deadline, treat as existing
+        if (
+            getattr(job, "is_expired", False)
+            or (getattr(job, "status", "").upper() == "EXPIRED")
+            or (job.application_end_date and is_date_expired(job.application_end_date))
+        ):
             existing_jobs.append(job)
             continue
 
@@ -751,6 +844,7 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
             seen_urls.add(url_key)
             deduped_batch.append((j, clean_url))
 
+        from gcc_job_radar.filters import extract_application_dates, is_date_expired
         from gcc_job_radar.relevance import score_job_posting
 
         for job, clean_url in deduped_batch:
@@ -761,6 +855,24 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
             job_score = getattr(job, "relevance_score", None)
             if job_score is None or job_score == 0:
                 job_score = score_job_posting(job)
+
+            start_d = getattr(job, "application_start_date", None)
+            end_d = getattr(job, "application_end_date", None)
+            if not start_d or not end_d:
+                extracted_s, extracted_e = extract_application_dates(
+                    getattr(job, "description", None) or getattr(job, "notes", None) or "",
+                    getattr(job, "published_date", None),
+                )
+                if not start_d and extracted_s:
+                    start_d = extracted_s
+                    job.application_start_date = extracted_s
+                if not end_d and extracted_e:
+                    end_d = extracted_e
+                    job.application_end_date = extracted_e
+
+            is_expired_job = getattr(job, "is_expired", False) or bool(end_d and is_date_expired(end_d))
+            if is_expired_job:
+                job.is_expired = True
 
             cursor.execute(
                 """
@@ -795,10 +907,19 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
             if matched:
                 matched_id, existing_status, existing_provider, existing_url, existing_loc = matched
                 # DISMISSED is a permanent tombstone — never re-open it to NEW.
-                # Any other non-NEW status (APPLIED, INTERVIEWING, REJECTED) is also preserved.
                 if existing_status == "DISMISSED":
                     continue  # Skip entirely — do not touch this record again
-                target_status = existing_status if existing_status != "NEW" else job.status
+
+                if existing_status in ("APPLIED", "INTERVIEWING", "REJECTED"):
+                    target_status = existing_status
+                    target_is_active = 0 if is_expired_job else 1
+                elif is_expired_job:
+                    target_status = "EXPIRED"
+                    target_is_active = 0
+                else:
+                    target_status = existing_status if existing_status != "NEW" else job.status
+                    target_is_active = 1
+
                 target_url = (
                     existing_url
                     if existing_provider != "email_alert" and job.provider == ATSProvider.EMAIL_ALERT
@@ -825,7 +946,9 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
                         apply_url = ?,
                         provider = ?,
                         published_date = COALESCE(NULLIF(?, ''), published_date),
-                        is_active = 1,
+                        application_start_date = COALESCE(NULLIF(?, ''), application_start_date),
+                        application_end_date = COALESCE(NULLIF(?, ''), application_end_date),
+                        is_active = ?,
                         is_remote = ?,
                         status = ?,
                         direct_search_url = COALESCE(?, direct_search_url),
@@ -839,6 +962,9 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
                         target_url,
                         target_provider,
                         job.published_date or "Active",
+                        start_d,
+                        end_d,
+                        target_is_active,
                         1 if job.is_remote else 0,
                         target_status,
                         getattr(job, "direct_search_url", None),
@@ -847,12 +973,17 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
                     ),
                 )
             else:
+                target_status = "EXPIRED" if is_expired_job else (getattr(job, "status", None) or "NEW")
+                target_is_active = 0 if is_expired_job else 1
+
                 cursor.execute(
                     """
                     INSERT INTO seen_jobs (
-                        id, company, title, location, apply_url, provider, published_date, is_active, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at
+                        id, company, title, location, apply_url, provider, published_date,
+                        application_start_date, application_end_date,
+                        is_active, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     ON CONFLICT(id) DO UPDATE SET
                         last_seen_at = CURRENT_TIMESTAMP,
                         company = excluded.company,
@@ -860,8 +991,14 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
                         location = excluded.location,
                         apply_url = excluded.apply_url,
                         published_date = excluded.published_date,
-                        is_active = 1,
+                        application_start_date = COALESCE(excluded.application_start_date, seen_jobs.application_start_date),
+                        application_end_date = COALESCE(excluded.application_end_date, seen_jobs.application_end_date),
+                        is_active = excluded.is_active,
                         is_remote = excluded.is_remote,
+                        status = CASE
+                            WHEN seen_jobs.status IN ('APPLIED', 'INTERVIEWING', 'REJECTED') THEN seen_jobs.status
+                            ELSE excluded.status
+                        END,
                         direct_search_url = COALESCE(excluded.direct_search_url, seen_jobs.direct_search_url),
                         relevance_score = excluded.relevance_score
                     """,
@@ -873,8 +1010,11 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
                         clean_url,
                         job.provider.value,
                         job.published_date or "Active",
+                        start_d,
+                        end_d,
+                        target_is_active,
                         1 if job.is_remote else 0,
-                        getattr(job, "status", None) or "NEW",
+                        target_status,
                         getattr(job, "applied_at", None)
                         or (
                             datetime.now(timezone.utc).isoformat()
@@ -889,14 +1029,14 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
 
         conn.commit()
 
-        # Attach persisted database rowid, status, applied_at, notes, direct_search_url, and relevance_score back to the JobPosting instances
+        # Attach persisted database rowid, status, applied_at, notes, direct_search_url, relevance_score, and dates back to the JobPosting instances
         cursor.execute(
-            "SELECT rowid, id, lower(apply_url), lower(company), lower(title), lower(location), status, applied_at, notes, direct_search_url, relevance_score FROM seen_jobs"
+            "SELECT rowid, id, lower(apply_url), lower(company), lower(title), lower(location), status, applied_at, notes, direct_search_url, relevance_score, application_start_date, application_end_date FROM seen_jobs"
         )
         rows = cursor.fetchall()
-        id_map = {r[1]: (r[0], r[6], r[7], r[8], r[9], r[10]) for r in rows}
-        url_map = {r[2]: (r[0], r[6], r[7], r[8], r[9], r[10]) for r in rows if r[2]}
-        role_map = {(r[3], r[4], r[5]): (r[0], r[6], r[7], r[8], r[9], r[10]) for r in rows}
+        id_map = {r[1]: (r[0], r[6], r[7], r[8], r[9], r[10], r[11], r[12]) for r in rows}
+        url_map = {r[2]: (r[0], r[6], r[7], r[8], r[9], r[10], r[11], r[12]) for r in rows if r[2]}
+        role_map = {(r[3], r[4], r[5]): (r[0], r[6], r[7], r[8], r[9], r[10], r[11], r[12]) for r in rows}
 
         for j in jobs:
             clean_u = canonicalize_url(str(j.apply_url)).lower()
@@ -913,6 +1053,13 @@ def record_jobs(jobs: list[JobPosting], db_path: Optional[Path] = None) -> None:
                 setattr(j, "notes", meta[3])
                 setattr(j, "direct_search_url", meta[4])
                 setattr(j, "relevance_score", meta[5] if meta[5] is not None else 0)
+                setattr(j, "application_start_date", meta[6])
+                setattr(j, "application_end_date", meta[7])
+                setattr(
+                    j,
+                    "is_expired",
+                    bool(meta[1] == "EXPIRED" or (meta[7] and is_date_expired(meta[7]))),
+                )
 
 
 def save_job(job: JobPosting, db_path: Optional[Path] = None) -> None:
@@ -1042,15 +1189,19 @@ def get_latest_jobs(
         if stat_norm != "ALL":
             inner_where += " AND UPPER(status) = ?"
             params.append(stat_norm)
+        if stat_norm == "NEW":
+            inner_where += " AND (application_end_date IS NULL OR trim(application_end_date) = '' OR date(application_end_date) >= date('now'))"
+    else:
+        inner_where += " AND (application_end_date IS NULL OR trim(application_end_date) = '' OR date(application_end_date) >= date('now'))"
 
     with sqlite3.connect(target_path) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute(
             f"""
-            SELECT rowid AS numeric_id, id, company, title, location, apply_url, provider, published_date, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at
+            SELECT rowid AS numeric_id, id, company, title, location, apply_url, provider, published_date, application_start_date, application_end_date, is_active, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at
             FROM (
-                SELECT rowid, id, company, title, location, apply_url, provider, published_date, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at,
+                SELECT rowid, id, company, title, location, apply_url, provider, published_date, application_start_date, application_end_date, is_active, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at,
                        ROW_NUMBER() OVER (
                            PARTITION BY lower(company), lower(title), lower(location)
                            ORDER BY relevance_score DESC, last_seen_at DESC, first_seen_at DESC
@@ -1167,6 +1318,10 @@ def query_jobs(
         if stat_norm != "ALL":
             inner_where += " AND UPPER(status) = ?"
             params.append(stat_norm)
+        if stat_norm == "NEW":
+            inner_where += " AND (application_end_date IS NULL OR trim(application_end_date) = '' OR date(application_end_date) >= date('now'))"
+    else:
+        inner_where += " AND (application_end_date IS NULL OR trim(application_end_date) = '' OR date(application_end_date) >= date('now'))"
 
     if min_score is not None and min_score > 0:
         inner_where += " AND relevance_score >= ?"
@@ -1205,9 +1360,9 @@ def query_jobs(
             params.append(f"%{loc_str}%")
 
     query = f"""
-        SELECT rowid AS numeric_id, id, company, title, location, apply_url, provider, published_date, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at
+        SELECT rowid AS numeric_id, id, company, title, location, apply_url, provider, published_date, application_start_date, application_end_date, is_active, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at
         FROM (
-            SELECT rowid, id, company, title, location, apply_url, provider, published_date, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at,
+            SELECT rowid, id, company, title, location, apply_url, provider, published_date, application_start_date, application_end_date, is_active, is_remote, status, applied_at, notes, direct_search_url, relevance_score, first_seen_at, last_seen_at,
                    ROW_NUMBER() OVER (
                        PARTITION BY lower(company), lower(title), lower(location)
                        ORDER BY relevance_score DESC, last_seen_at DESC, first_seen_at DESC
@@ -1229,7 +1384,7 @@ def query_jobs(
         return [dict(row) for row in rows]
 
 
-VALID_JOB_STATUSES = {"NEW", "APPLIED", "INTERVIEWING", "REJECTED", "DISMISSED", "NEEDS_RESOLVE"}
+VALID_JOB_STATUSES = {"NEW", "APPLIED", "INTERVIEWING", "REJECTED", "DISMISSED", "NEEDS_RESOLVE", "EXPIRED"}
 
 
 def update_job_direct_search_url(

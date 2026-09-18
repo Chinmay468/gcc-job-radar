@@ -40,6 +40,7 @@ from gcc_job_radar.db import (
     get_stale_applications,
     get_stats,
     mark_job_status,
+    prune_expired_jobs,
     purge_invalid_jobs,
     record_jobs,
 )
@@ -256,6 +257,9 @@ def _dict_to_job_posting(j: dict[str, Any]) -> JobPosting:
         provider=provider_enum,
         published_date=j.get("published_date"),
         description=j.get("notes") or "",
+        application_start_date=j.get("application_start_date"),
+        application_end_date=j.get("application_end_date"),
+        is_expired=bool(j.get("is_expired", False) or j.get("status") == "EXPIRED"),
     )
 
 
@@ -345,6 +349,7 @@ async def handle_command(
         await send_telegram_reply(bot_token, chat_id, stats_text, client)
 
     elif cmd == "/latest":
+        prune_expired_jobs(db_path=db_path)
         recent_jobs = get_latest_jobs(limit=5, status="NEW", db_path=db_path)
         if not recent_jobs:
             reply = format_jobs_html([], "Latest Discovered Openings")
@@ -515,6 +520,7 @@ async def handle_command(
                 client,
             )
             jobs = await scan_all_companies(companies=target_companies)
+            prune_expired_jobs(db_path=db_path)
             new_jobs, _ = filter_new_jobs(jobs, db_path)
             record_jobs(jobs, db_path)
 

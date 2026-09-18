@@ -21,9 +21,12 @@ if str(ROOT_DIR) not in sys.path:
 
 from gcc_job_radar.db import get_db_path, init_db, record_jobs, save_job
 from gcc_job_radar.filters import (
+    extract_application_dates,
+    is_date_expired,
     is_tech_role,
     is_valid_get_role,
     matches_india_location,
+    normalize_date_str,
     requires_experienced_candidate,
 )
 from gcc_job_radar.models import ATSProvider, JobPosting
@@ -136,6 +139,15 @@ def is_qualified_unstop_item(item: dict[str, Any], require_2027: bool = False) -
     if regn_open == 0 and inner_reg_status != "OPEN":
         return False, "Registration not open"
 
+    end_date_val = (
+        regn_req.get("end_date")
+        or regn_req.get("end_time")
+        or item.get("end_date")
+        or item.get("regn_end_date")
+    )
+    if end_date_val and is_date_expired(end_date_val):
+        return False, f"Registration deadline passed ({end_date_val})"
+
     title = str(item.get("title") or "").strip()
     if not title:
         return False, "Empty title"
@@ -232,6 +244,33 @@ def build_job_posting_from_unstop(item: dict[str, Any]) -> Optional[JobPosting]:
     # Calculate relevance score using stack keywords
     score = calculate_relevance_score(title, full_description)
 
+    regn_req = item.get("regnRequirements") or {}
+    raw_start = (
+        regn_req.get("start_date")
+        or regn_req.get("start_time")
+        or item.get("start_date")
+        or item.get("regn_start_date")
+        or item.get("approved_date")
+    )
+    raw_end = (
+        regn_req.get("end_date")
+        or regn_req.get("end_time")
+        or item.get("end_date")
+        or item.get("regn_end_date")
+    )
+
+    start_date = normalize_date_str(raw_start)
+    end_date = normalize_date_str(raw_end)
+
+    if not start_date or not end_date:
+        ext_s, ext_e = extract_application_dates(full_description, updated_at)
+        if not start_date:
+            start_date = ext_s
+        if not end_date:
+            end_date = ext_e
+
+    is_expired = bool(end_date and is_date_expired(end_date))
+
     try:
         return JobPosting(
             id=f"unstop_{opp_id}",
@@ -245,7 +284,10 @@ def build_job_posting_from_unstop(item: dict[str, Any]) -> Optional[JobPosting]:
             description=full_description or None,
             notes=full_description[:500] if full_description else None,
             relevance_score=score,
-            status="NEW",
+            status="EXPIRED" if is_expired else "NEW",
+            application_start_date=start_date,
+            application_end_date=end_date,
+            is_expired=is_expired,
         )
     except Exception as exc:
         logger.debug("Error building JobPosting for Unstop item %s: %s", opp_id, exc)

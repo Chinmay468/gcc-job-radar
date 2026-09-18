@@ -465,3 +465,83 @@ def test_is_valid_get_role(title: str, description: str, expected: bool) -> None
     """Verify GET roles are strictly accepted for tech and rejected for non-software disciplines."""
     assert is_valid_get_role(title, description) is expected
 
+
+# ==============================================================================
+# Application Date & Deadline Extraction & Expiration Tests
+# ==============================================================================
+
+from gcc_job_radar.filters import (
+    extract_application_dates,
+    is_date_expired,
+    normalize_date_str,
+)
+
+
+@pytest.mark.parametrize(
+    "val,expected",
+    [
+        ("2026-09-30", "2026-09-30"),
+        ("2026-09-30T18:30:00.000Z", "2026-09-30"),
+        ("2026-10-01 09:00:00", "2026-10-01"),
+        ("30/09/2026", "2026-09-30"),
+        ("30-09-2026", "2026-09-30"),
+        ("09/30/2026", "2026-09-30"),
+        ("30 Sep 2026", "2026-09-30"),
+        ("30th September, 2026", "2026-09-30"),
+        ("September 30, 2026", "2026-09-30"),
+        ("Sep 14, 2026", "2026-09-14"),
+        ("15-Oct-2026", "2026-10-15"),
+        ("Recent", None),
+        ("Active", None),
+        ("None", None),
+        ("N/A", None),
+        ("", None),
+        ("Not a date string", None),
+    ],
+)
+def test_normalize_date_str(val: str, expected: Optional[str]) -> None:
+    assert normalize_date_str(val) == expected
+
+
+def test_is_date_expired() -> None:
+    ref_date = "2026-09-18"
+    assert is_date_expired("2026-09-10", ref_date=ref_date) is True
+    assert is_date_expired("2026-09-17", ref_date=ref_date) is True
+    assert is_date_expired("2026-09-18", ref_date=ref_date) is False
+    assert is_date_expired("2026-09-25", ref_date=ref_date) is False
+    assert is_date_expired("2026-10-01", ref_date=ref_date) is False
+    assert is_date_expired(None, ref_date=ref_date) is False
+    assert is_date_expired("Recent", ref_date=ref_date) is False
+
+
+def test_extract_application_dates_patterns() -> None:
+    # Deadline in text
+    text1 = "We are hiring! Application deadline: 30 September 2026. Join our team."
+    s1, e1 = extract_application_dates(text1, published_date="2026-09-01")
+    assert s1 == "2026-09-01"
+    assert e1 == "2026-09-30"
+
+    # Both start date and closing date in text
+    text2 = "Registration starts: 01/09/2026. Last date to apply: 15-Oct-2026."
+    s2, e2 = extract_application_dates(text2)
+    assert s2 == "2026-09-01"
+    assert e2 == "2026-10-15"
+
+    # Closes on pattern
+    text3 = "Closes on: Oct 15, 2026."
+    s3, e3 = extract_application_dates(text3)
+    assert s3 is None
+    assert e3 == "2026-10-15"
+
+    # Apply by pattern
+    text4 = "Software Development Engineer - Apply by: 2026-11-01"
+    s4, e4 = extract_application_dates(text4, published_date="Recent")
+    assert s4 is None
+    assert e4 == "2026-11-01"
+
+    # No dates in text, published_date fallback
+    text5 = "Full stack developer opening in Bangalore."
+    s5, e5 = extract_application_dates(text5, published_date="2026-09-14")
+    assert s5 == "2026-09-14"
+    assert e5 is None
+

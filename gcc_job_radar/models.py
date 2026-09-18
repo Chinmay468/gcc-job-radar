@@ -32,6 +32,7 @@ class JobStatus(str, Enum):
     REJECTED = "REJECTED"
     DISMISSED = "DISMISSED"
     NEEDS_RESOLVE = "NEEDS_RESOLVE"
+    EXPIRED = "EXPIRED"
 
 
 class CompanyConfig(BaseModel):
@@ -68,6 +69,9 @@ class JobPosting(BaseModel):
     tailored_tex_path: Optional[str] = None
     tailored_pdf_path: Optional[str] = None
     tier: Optional[str] = None
+    application_start_date: Optional[str] = None
+    application_end_date: Optional[str] = None
+    is_expired: bool = False
 
 
 # Backward compatible alias referenced in legacy tests and scripts

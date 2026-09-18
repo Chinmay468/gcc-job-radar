@@ -47,6 +47,8 @@ from gcc_job_radar.display import console, render_results
 from gcc_job_radar.filters import (
     is_entry_level,
     is_potential_india_location,
+    extract_application_dates,
+    is_date_expired,
     is_remote_opening,
     requires_experienced_candidate,
 )
@@ -743,6 +745,10 @@ def filter_and_convert_jobs(
             else build_direct_search_url(clean_company, clean_title)
         )
 
+        pub_d = date_header or item.date_str or "Recent"
+        app_start_d, app_end_d = extract_application_dates(item.snippet or "", pub_d)
+        is_expired = bool(app_end_d and is_date_expired(app_end_d))
+
         try:
             posting = JobPosting(
                 id=job_id,
@@ -751,9 +757,12 @@ def filter_and_convert_jobs(
                 location=clean_loc,
                 apply_url=clean_url,
                 provider=ATSProvider.EMAIL_ALERT,
-                published_date=date_header or item.date_str or "Recent",
+                published_date=pub_d,
+                application_start_date=app_start_d,
+                application_end_date=app_end_d,
                 is_remote=is_remote,
-                status="NEW",
+                status="EXPIRED" if is_expired else "NEW",
+                is_expired=is_expired,
                 direct_search_url=direct_search,
             )
             qualified.append(posting)

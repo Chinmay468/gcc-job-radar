@@ -77,6 +77,9 @@ def to_job_posting(item: JobPosting | dict[str, Any]) -> JobPosting:
         why=item.get("why"),
         tailored_tex_path=item.get("tailored_tex_path"),
         tailored_pdf_path=item.get("tailored_pdf_path"),
+        application_start_date=item.get("application_start_date"),
+        application_end_date=item.get("application_end_date"),
+        is_expired=bool(item.get("is_expired", False)),
     )
     if posting.relevance_score is None or posting.relevance_score == 0:
         score_job_posting(posting)
@@ -258,13 +261,25 @@ def format_jobs_html(
             clean_title = html.escape(job.title)
             clean_location = html.escape(job.location)
             ats = job.provider.value.upper()
-            date = html.escape(str(job.published_date or "Active"))
             why_text = html.escape(job.why or "Verified entry-level opening")
+
+            date_parts: list[str] = []
+            start_date = getattr(job, "application_start_date", None) or job.published_date
+            end_date = getattr(job, "application_end_date", None)
+            if start_date and str(start_date).strip() not in ("Recent", "Active", "None", ""):
+                date_parts.append(f"📅 Posted: {html.escape(str(start_date))}")
+            elif not end_date:
+                date_parts.append(f"📅 {html.escape(str(job.published_date or 'Active'))}")
+
+            if end_date and str(end_date).strip():
+                date_parts.append(f"⏳ Closes: {html.escape(str(end_date))}")
+
+            date_str = " • ".join(date_parts) if date_parts else f"📅 {html.escape(str(job.published_date or 'Active'))}"
 
             card = (
                 f"<b>{current_idx}. {clean_company}</b>\n"
                 f"💼 {clean_title}\n"
-                f"📍 {clean_location} ({ats}) • 📅 {date}\n"
+                f"📍 {clean_location} ({ats}) • {date_str}\n"
                 f'🔗 <a href="{html.escape(str(effective_url))}">{html.escape(label)}</a>\n'
                 f"💡 <i>{why_text}</i>"
             )

@@ -28,6 +28,7 @@ from gcc_job_radar.db import (
     init_db,
     make_job_key,
     mark_job_status,
+    prune_expired_jobs,
     query_jobs,
     reactivate_company,
     record_companies_scan_activity,
@@ -324,6 +325,7 @@ def scan(
         for c in target_companies
     ]
     record_companies_scan_activity(batch_counts, auto_dormant_threshold=auto_dormant_threshold, db_path=db_path)
+    prune_expired_jobs(db_path=db_path)
 
     new_jobs, existing_jobs = filter_new_jobs(all_jobs, db_path)
 

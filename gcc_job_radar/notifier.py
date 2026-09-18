@@ -46,12 +46,17 @@ async def send_discord_notification(
                     {"name": "💼 Position", "value": job.title, "inline": True},
                     {"name": "📍 Location", "value": job.location, "inline": True},
                     {"name": "📡 Source", "value": job.provider.value.upper(), "inline": True},
-                    {"name": "📅 Date", "value": job.published_date or "Active", "inline": True},
                 ],
                 "footer": {
                     "text": "GCC Job Radar • India Tech Tracker"
                 },
             }
+            if getattr(job, "application_start_date", None):
+                embed["fields"].append({"name": "📅 Posted", "value": str(job.application_start_date), "inline": True})
+            else:
+                embed["fields"].append({"name": "📅 Date", "value": job.published_date or "Active", "inline": True})
+            if getattr(job, "application_end_date", None):
+                embed["fields"].append({"name": "⏳ Closes", "value": str(job.application_end_date), "inline": True})
             if getattr(job, "why", None):
                 embed["fields"].append({
                     "name": "💡 Why",
@@ -157,10 +162,22 @@ def format_job_card_html(job: JobPosting | dict[str, Any]) -> str:
         date = job.get("published_date") or "Active"
 
     effective_url, _, label = resolve_effective_apply_url(job)
+    start_date = getattr(job, "application_start_date", None) if isinstance(job, JobPosting) else job.get("application_start_date")
+    end_date = getattr(job, "application_end_date", None) if isinstance(job, JobPosting) else job.get("application_end_date")
+
+    date_parts: list[str] = []
+    if start_date and str(start_date).strip() not in ("Recent", "Active", "None", ""):
+        date_parts.append(f"📅 Posted: {html.escape(str(start_date))}")
+    elif not end_date:
+        date_parts.append(f"📅 {html.escape(str(date or 'Active'))}")
+    if end_date and str(end_date).strip():
+        date_parts.append(f"⏳ Closes: {html.escape(str(end_date))}")
+    date_line = " • ".join(date_parts) if date_parts else f"📅 {html.escape(str(date or 'Active'))}"
+
     card = (
         f"🚀 <b>{html.escape(company)}</b>\n"
         f"💼 {html.escape(pos_title)}\n"
-        f"📍 {html.escape(location)} ({ats}) • 📅 {html.escape(date)}\n"
+        f"📍 {html.escape(location)} ({ats}) • {date_line}\n"
         f"🔗 <a href=\"{html.escape(str(effective_url))}\">{html.escape(label)}</a>"
     )
     tex_path = getattr(job, "tailored_tex_path", None) if isinstance(job, JobPosting) else (job.get("tailored_tex_path") if isinstance(job, dict) else None)
@@ -340,7 +357,9 @@ async def send_discord_digest(
             score = getattr(j, "relevance_score", 0) or 0
             eff_url, _, label = resolve_effective_apply_url(j)
             score_prefix = f"`[{score} pts]` " if score > 0 else ""
-            line = f"• {score_prefix}[{j.title}]({eff_url}) — *{j.location}*"
+            end_date = getattr(j, "application_end_date", None)
+            deadline_str = f" • ⏳ *Closes: {end_date}*" if end_date else ""
+            line = f"• {score_prefix}[{j.title}]({eff_url}) — *{j.location}*{deadline_str}"
             why_text = getattr(j, "why", None)
             if score >= 20 and why_text:
                 line += f"\n  💡 *{why_text}*"
@@ -417,7 +436,9 @@ async def send_telegram_digest(
             score_badge = f"<code>[{score} pts]</code> " if score > 0 else ""
             eff_url, _, _ = resolve_effective_apply_url(j)
             why_text = getattr(j, "why", None)
-            line = f"  • {score_badge}<a href=\"{html.escape(str(eff_url))}\">{html.escape(j.title)}</a> — <i>{html.escape(j.location)}</i>"
+            end_date = getattr(j, "application_end_date", None)
+            deadline_str = f" • ⏳ <i>Closes: {html.escape(str(end_date))}</i>" if end_date else ""
+            line = f"  • {score_badge}<a href=\"{html.escape(str(eff_url))}\">{html.escape(j.title)}</a> — <i>{html.escape(j.location)}</i>{deadline_str}"
             if score >= 20 and why_text:
                 line += f"\n    💡 <i>{html.escape(why_text)}</i>"
             comp_lines.append(line)
