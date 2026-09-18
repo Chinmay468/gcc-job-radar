@@ -283,41 +283,41 @@ flowchart TD
 
     subgraph ORCHESTRATION["⚡ 5. Execution & Orchestration"]
         direction TB
-        E1["GitHub Actions 4-Hour Cron"]
-        E2["Local CLI & uv Runner"]
-        E3["Render Cloud Web Service"]
+        E1["GitHub Actions Cron"]
+        E2["Local CLI (uv)"]
+        E3["Render Web Service"]
     end
 
     subgraph INGEST["📥 1. Ingestion Tier"]
         direction TB
-        A1["ATS Connectors<br/>(Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Phenom, Amazon)"]
-        A2["Multi-Account IMAP Alerts<br/>(LinkedIn, Naukri, Indeed, Glassdoor)"]
-        A3["Campus Competitions<br/>(Unstop Ingestion Engine)"]
-        A4["Custom Career Scrapers<br/>(Flipkart TurboHire, SuccessFactors)"]
+        A1["ATS Connectors"]
+        A2["Email Alerts (IMAP)"]
+        A3["Campus Drives (Unstop)"]
+        A4["Custom Scrapers"]
     end
 
     subgraph PROCESS["⚙️ 2. Filtering & Evaluation Pipeline"]
         direction TB
-        B1["URL Canonicalization & Unwrapping"]
-        B2["Strict Role & Seniority Filtering<br/>(Entry-Level, Fresher, SDE-1 Only)"]
-        B3["Application Start & Deadline Extraction<br/>(Regex Normalizer & Two-Stage Expiry)"]
-        B4["Stack Relevance Scoring<br/>(0–100 Bounded Match Score)"]
+        B1["URL Canonicalization"]
+        B2["Role & Level Filter"]
+        B3["Deadline & Auto-Expiry"]
+        B4["Stack Relevance Scoring"]
     end
 
     subgraph STORAGE["💾 3. Hybrid Persistence Layer"]
         direction TB
-        C1[("Local SQLite Database<br/>gcc_jobs.db")]
-        C2["Turso Sync Engine<br/>(turso_sync.py • Hrana HTTP)"]
-        C3[("Turso Cloud Database<br/>Serverless libSQL Replica")]
+        C1[("Local SQLite<br/>gcc_jobs.db")]
+        C2["Turso Sync Engine"]
+        C3[("Turso Cloud libSQL")]
     end
 
     subgraph CONSUMER["🚀 4. Consumer & Notification Tier"]
         direction TB
-        D1["Interactive Telegram Bot<br/>(Long-polling • Inline Actions • /apply)"]
-        D2["Discord Webhook Notifier<br/>(Embed Cards • Deadline Badges)"]
-        D3["Consolidated Daily Digest<br/>(Batch Multi-Role Summaries)"]
-        D4["Conversational AI Agent<br/>(Groq LPU • Gemini • OpenAI • NLP Fallback)"]
-        D5["Resume Tailor Bridge<br/>(LaTeX ATS-Optimized Resume Tailoring)"]
+        D1["Interactive Telegram Bot"]
+        D2["Discord Notifier"]
+        D3["Daily Digest Engine"]
+        D4["Conversational AI Agent"]
+        D5["Resume Tailor Bridge"]
     end
 
     ORCHESTRATION -.-> INGEST
