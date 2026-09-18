@@ -31,6 +31,14 @@
   - Consolidates notifications into a single cleanly-formatted digest per scan instead of spamming individual messages.
   - Groups discovered roles by company with direct ATS application links.
   - Supports both **Discord** and **Telegram** webhook/bot deliveries.
+- **Application Start Dates & Closing Deadlines**:
+  - Automatically extracts and normalizes application start dates and closing deadlines from job descriptions, emails, and competition requirements (`regnRequirements`).
+  - Alerts format dates clearly: `📅 Posted: {start_date} • ⏳ Closes: {end_date}`.
+  - **Two-Stage Automatic Expiry Lifecycle**: Expired roles are immediately deactivated upon ingestion and pruned before scans so closed roles never resurface, while candidate tracking history (`APPLIED`, `INTERVIEWING`) remains protected.
+- **Turso Cloud Database Synchronization**:
+  - Seamlessly integrates serverless Turso (libSQL/SQLite in the cloud) via pure-Python Hrana HTTP transport.
+  - Bidirectional sync (`gcc-job-radar db-sync --pull / --push / --status`) bridges local development, interactive Telegram bot instances, and GitHub Actions runners.
+  - Prevents data loss and permanently eliminates duplicate alerts caused by CI cache evictions.
 - **Conversational AI Career Agent**:
   - Natural language CLI queries via `gcc-job-radar ask "<question>"`.
   - Multi-provider resilient LLM chain: **Groq (LPU) ➔ Gemini ➔ OpenAI ➔ Rule-based NLP**.
@@ -134,6 +142,21 @@ gcc-job-radar ask "Which foreign GCCs offer compensation over 15 LPA for fresher
 gcc-job-radar ask "How many total jobs are tracked in the database?"
 ```
 
+### 5. Database & Cloud Synchronization (Turso)
+
+Synchronize local state with your Turso cloud database across machines and CI:
+
+```bash
+# Compare row counts between local SQLite and Turso cloud database
+gcc-job-radar db-sync --status
+
+# Pull latest state from Turso into local SQLite
+gcc-job-radar db-sync --pull
+
+# Push local records to Turso cloud
+gcc-job-radar db-sync --push
+```
+
 ---
 
 ## Interactive Telegram Bot
@@ -208,15 +231,17 @@ export PRIMARY_LLM_PROVIDER="gemini"
 
 A production-ready GitHub Actions workflow is included at [`.github/workflows/job_radar_cron.yml`](.github/workflows/job_radar_cron.yml).
 
-### Workflow Features:
+#### Workflow Features:
 1. **Scheduled Runs**: Runs automatically every 4 hours (`cron: '0 */4 * * *'`).
-2. **Persistent Database Caching**: Uses `actions/cache@v4` to persist `gcc_jobs.db` across runs, ensuring duplicate alerts are never dispatched.
+2. **Turso Cloud Database Synchronization**: Automatically pulls latest database state before scanning and pushes new discoveries, statuses, and pruning back to Turso in the cloud.
 3. **Daily Digest Support**: Dispatches consolidated digests directly to Discord and Telegram.
-4. **Artifact Retention**: Automatically uploads `latest_openings.json` as a build artifact retained for 7 days.
+4. **Artifact Retention**: Automatically uploads `latest_openings.json` and tailored resumes as build artifacts retained for 7 days.
 5. **Manual Triggering**: Triggerable on-demand via the **Actions** tab with custom company filters and digest flags.
 
 ### GitHub Secrets Setup:
 Configure these in **Settings** ➔ **Secrets and variables** ➔ **Actions**:
+- `TURSO_DATABASE_URL` — Turso database URL (`libsql://...`).
+- `TURSO_AUTH_TOKEN` — Turso JWT authorization token.
 - `DISCORD_WEBHOOK_URL` — Discord webhook URL.
 - `TELEGRAM_BOT_TOKEN` — Telegram Bot API token.
 - `TELEGRAM_CHAT_ID` — Authorized Telegram Chat or Channel ID.
@@ -224,7 +249,6 @@ Configure these in **Settings** ➔ **Secrets and variables** ➔ **Actions**:
 - `EMAIL_USER_2` / `EMAIL_PASSWORD_2` — (Optional) Secondary email account.
 - `EMAIL_USER_3` / `EMAIL_PASSWORD_3` — (Optional) Tertiary / college email account.
 - `GEMINI_API_KEY` / `GROQ_API_KEY` — (Optional) For automated AI agent analysis.
-
 
 ---
 
@@ -243,58 +267,80 @@ pyflakes gcc_job_radar tools tests
 
 ---
 
-## Project Structure
+## Architecture Overview
 
-```
-gcc-job-radar/
-├── .github/
-│   └── workflows/
-│       └── job_radar_cron.yml   # 4-hour scheduled GitHub Actions workflow
-├── pyproject.toml               # Package metadata, dependencies, entry points
-├── render.yaml                  # Render free Web Service deployment configuration
-├── README.md                    # Documentation
-├── gcc_job_radar/
-│   ├── __init__.py              # Package version
-│   ├── cli.py                   # Typer CLI runner with rich UI, flags, and subcommands
-│   ├── config.py                # Curated company registry and regex pattern definitions
-│   ├── models.py                # Pydantic data models (JobPosting, CompanyConfig)
-│   ├── filters.py               # Strict title, level, and Indian location matching logic
-│   ├── link_resolver.py         # Link resolution, canonical ATS unwrapping, and direct search
-│   ├── relevance.py             # Stack-relevance scoring engine (0-100 bounded score)
-│   ├── dormant_companies.py     # Registry of dormant/paused companies
-│   ├── db.py                    # SQLite persistence, state tracking, stale applications
-│   ├── notifier.py              # Discord & Telegram individual & daily digest dispatchers
-│   ├── scanner.py               # Async concurrent scanning engine (httpx + semaphore)
-│   ├── display.py               # Rich terminal tables, pipeline stats, and stale alerts
-│   ├── ai_agent.py              # Multi-provider LLM conversational AI agent with tool use
-│   ├── bot_listener.py          # Interactive Telegram bot daemon
-│   └── clients/
-│       ├── base.py              # Base abstract ATS client
-│       ├── amazon.py            # Amazon Jobs search API client
-│       ├── greenhouse.py        # Greenhouse API client
-│       ├── lever.py             # Lever API client
-│       ├── ashby.py             # Ashby API client
-│       ├── workday.py           # Workday API client
-│       ├── smartrecruiters.py   # SmartRecruiters API client
-│       ├── phenom_successfactors.py # Phenom/SuccessFactors API client
-│       └── custom_career.py     # Custom DOM / API career scraper (e.g., Flipkart Turbohire)
-├── tools/
-│   ├── web_entrypoint.py        # Dual-mode HTTP health server + Telegram bot entrypoint for Render
-│   ├── ingest_email.py          # Multi-account IMAP email job alert ingestion
-│   ├── check_reverts.py         # Recruiter interview & assessment revert detector
-│   ├── check_links.py           # Automated link resolution and health checker
-│   ├── discover_ats.py          # ATS sweep & candidate discovery engine
-│   └── mass_scale_registry.py   # Async probing engine scaling registry to 10,000+ active boards
+GCC Job Radar is engineered as a modular, event-driven, and multi-tier job intelligence pipeline. It continuously monitors career boards, email alerts, and campus portals, normalizes and validates openings, maintains a synchronized cloud/local persistence layer, and surfaces opportunities through rich interfaces and conversational agents.
 
-└── tests/
-    ├── test_filters.py          # Title/location regex positive & negative test suite
-    ├── test_clients.py          # Mocked HTTP tests for ATS clients
-    ├── test_db.py               # SQLite schema, upsert, and isolation tests
-    ├── test_relevance.py        # Stack-relevance scoring unit tests
-    ├── test_stale_tracking.py   # Stale application tracking & pipeline stats tests
-    ├── test_digest.py           # Consolidated daily digest notification tests
-    ├── test_dormant.py          # Dormant companies registry & reactivation tests
-    ├── test_ask_command.py      # AI agent CLI 'ask' command tests
-    ├── test_notifier.py         # Discord & Telegram payload and error handling tests
-    └── test_cli.py              # CliRunner tests for flags, exports, and dispatch
+### High-Level System Architecture
+
+```mermaid
+flowchart TD
+    subgraph INGEST["1. Ingestion Tier"]
+        direction TB
+        A1["ATS Connectors<br/>(Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Phenom, Amazon)"]
+        A2["Multi-Account IMAP Alerts<br/>(LinkedIn, Naukri, Indeed, Glassdoor)"]
+        A3["Campus Competitions<br/>(Unstop Ingestion Engine)"]
+        A4["Custom Career Scrapers<br/>(Flipkart TurboHire, SuccessFactors)"]
+    end
+
+    subgraph PROCESS["2. Filtering & Evaluation Pipeline"]
+        direction TB
+        B1["URL Canonicalization & Unwrapping"]
+        B2["Strict Role & Seniority Filtering<br/>(Entry-Level, Fresher, SDE-1 Only)"]
+        B3["Application Start & Deadline Extraction<br/>(Regex Normalizer & Two-Stage Expiry)"]
+        B4["Stack Relevance Scoring<br/>(0–100 Bounded Match Score)"]
+    end
+
+    subgraph STORAGE["3. Hybrid Persistence Layer"]
+        direction TB
+        C1[("Local SQLite Database<br/>gcc_jobs.db")]
+        C2["Turso Sync Engine<br/>(turso_sync.py • Hrana HTTP)"]
+        C3[("Turso Cloud Database<br/>Serverless libSQL Replica")]
+    end
+
+    subgraph CONSUMER["4. Consumer & Notification Tier"]
+        direction TB
+        D1["Interactive Telegram Bot<br/>(Long-polling • Inline Actions • /apply)"]
+        D2["Discord Webhook Notifier<br/>(Embed Cards • Deadline Badges)"]
+        D3["Consolidated Daily Digest<br/>(Batch Multi-Role Summaries)"]
+        D4["Conversational AI Agent<br/>(Groq LPU • Gemini • OpenAI • NLP Fallback)"]
+        D5["Resume Tailor Bridge<br/>(LaTeX ATS-Optimized Resume Tailoring)"]
+    end
+
+    subgraph ORCHESTRATION["5. Execution & Orchestration"]
+        direction TB
+        E1["GitHub Actions 4-Hour Cron"]
+        E2["Local CLI & uv Runner"]
+        E3["Render Cloud Web Service"]
+    end
+
+    INGEST --> PROCESS
+    PROCESS --> STORAGE
+    C1 <--> C2 <--> C3
+    STORAGE --> CONSUMER
+    ORCHESTRATION -.-> INGEST
+    ORCHESTRATION -.-> STORAGE
 ```
+
+### Architectural Pillars
+
+1. **Ingestion Tier (Multi-Source Harvesting)**:
+   - **Direct ATS APIs**: Native async HTTP connectors query canonical endpoints for Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Phenom, and Amazon Jobs with concurrency throttling via `httpx` semaphores.
+   - **Multi-Account IMAP Ingestor**: Connects across up to 3 email accounts over IMAP SSL, parses job alert emails from LinkedIn, Naukri, Indeed, and Glassdoor, and unwraps redirect tracking parameters into clean canonical URLs.
+   - **Campus & Hackathon Feeds**: Ingests fresher competitions, hiring challenges, and off-campus drives from Unstop.
+
+2. **Processing & Evaluation Pipeline**:
+   - **Canonicalization**: Strips UTM tracking, recruiter tokens, and redirects to ensure unique primary key mapping across all platforms.
+   - **Strict Negative & Positive Level Filtering**: Enforces entry-level eligibility (Fresher, Associate, Intern, SDE-1) while discarding Senior, Lead, Staff, Principal, and numeric levels II–VI.
+   - **Stack-Relevance Scoring Engine**: Calculates bounded 0–100 match scores based on modern full-stack competencies (Java, Spring Boot, MERN, Kafka, Docker, MySQL, AWS).
+   - **Application Dates & Automatic Expiry Lifecycle**: Detects application start dates and closing deadlines (`extract_application_dates`). Automatically expires past-deadline roles on ingestion and scheduled pruning while strictly preserving candidate tracking history (`APPLIED`, `INTERVIEWING`).
+
+3. **Hybrid Persistence & Synchronization (Turso Cloud libSQL)**:
+   - **Zero-Latency Local Operations**: Scans and CLI commands query local SQLite (`gcc_jobs.db`) in microseconds for high-throughput batch operations.
+   - **Cloud Sync Engine (`turso_sync.py`)**: Uses Turso's pure-Python Hrana HTTP transport to pull state before scans and push discoveries after scans.
+   - **Cross-Environment State Parity**: Keeps local development, mobile Telegram interactions, and ephemeral GitHub Actions runners completely in sync, permanently eliminating CI cache eviction issues and duplicate alert loops.
+
+4. **Consumer & Notification Interfaces**:
+   - **Interactive Telegram Bot**: Long-polling daemon supporting instant mobile scanning (`/scan`), status tracking (`/apply`, `/interviewing`, `/dismiss`), and stale application alerts.
+   - **Discord & Digest Notifications**: Color-coded rich embed cards with clickable application links, location indicators, and closing deadline countdowns.
+   - **AI Career Agent & Resume Bridge**: Resilient multi-provider LLM chain (Groq LPU ➔ Gemini ➔ OpenAI ➔ Rule-based NLP) providing natural-language querying and automated LaTeX resume tailoring for high-priority openings.
