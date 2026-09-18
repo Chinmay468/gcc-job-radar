@@ -273,13 +273,6 @@ GCC Job Radar is engineered as a modular, event-driven, and multi-tier job intel
 
 ### High-Level System Architecture
 
-<p align="center">
-  <img src="assets/architecture_flow.svg" alt="GCC Job Radar End-to-End System Flow" width="100%">
-</p>
-
-<details>
-<summary><b>View Mermaid Flowchart Code</b></summary>
-
 ```mermaid
 flowchart TD
     classDef ingest fill:#0284c7,stroke:#38bdf8,stroke-width:2px,color:#ffffff;
@@ -346,8 +339,6 @@ flowchart TD
     style CONSUMER fill:#7c2d12,stroke:#fb923c,stroke-width:2px,color:#ffffff
     style ORCHESTRATION fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#ffffff
 ```
-
-</details>
 
 ### Architectural Pillars
 
