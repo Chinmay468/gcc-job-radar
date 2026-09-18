@@ -288,14 +288,14 @@ flowchart TD
     classDef consumer fill:#ea580c,stroke:#fb923c,stroke-width:2px,color:#ffffff;
     classDef orch fill:#4f46e5,stroke:#818cf8,stroke-width:2px,color:#ffffff;
 
-    subgraph ORCHESTRATION["⚡ 5. Execution & Orchestration"]
+    subgraph ORCHESTRATION["5. Execution & Orchestration"]
         direction TB
         E1["GitHub Actions Cron"]
         E2["Local CLI (uv)"]
         E3["Render Web Service"]
     end
 
-    subgraph INGEST["📥 1. Ingestion Tier"]
+    subgraph INGEST["1. Ingestion Tier"]
         direction TB
         A1["ATS Connectors"]
         A2["Email Alerts (IMAP)"]
@@ -303,7 +303,7 @@ flowchart TD
         A4["Custom Scrapers"]
     end
 
-    subgraph PROCESS["⚙️ 2. Filtering & Evaluation Pipeline"]
+    subgraph PROCESS["2. Filtering & Evaluation Pipeline"]
         direction TB
         B1["URL Canonicalization"]
         B2["Role & Level Filter"]
@@ -311,14 +311,14 @@ flowchart TD
         B4["Stack Relevance Scoring"]
     end
 
-    subgraph STORAGE["💾 3. Hybrid Persistence Layer"]
+    subgraph STORAGE["3. Hybrid Persistence Layer"]
         direction TB
         C1[("Local SQLite<br/>gcc_jobs.db")]
         C2["Turso Sync Engine"]
         C3[("Turso Cloud libSQL")]
     end
 
-    subgraph CONSUMER["🚀 4. Consumer & Notification Tier"]
+    subgraph CONSUMER["4. Consumer & Notification Tier"]
         direction TB
         D1["Interactive Telegram Bot"]
         D2["Discord Notifier"]
