@@ -48,12 +48,24 @@ DEFAULT_HEADERS = {
     "Accept": "application/json, text/plain, */*",
 }
 
-from tools.discovery_utils import (
-    CORPORATE_SUFFIXES,
-    KNOWN_ABBREVIATIONS,
-    clean_company_name,
-    generate_slug_candidates,
-)
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+try:
+    from tools.discovery_utils import (
+        CORPORATE_SUFFIXES,
+        KNOWN_ABBREVIATIONS,
+        clean_company_name,
+        generate_slug_candidates,
+    )
+except ImportError:
+    from discovery_utils import (
+        CORPORATE_SUFFIXES,
+        KNOWN_ABBREVIATIONS,
+        clean_company_name,
+        generate_slug_candidates,
+    )
 
 
 @dataclass

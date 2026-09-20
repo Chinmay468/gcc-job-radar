@@ -34,11 +34,17 @@ from gcc_job_radar.models import ATSProvider, CompanyConfig, JobPosting
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("probe_batch")
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "gcc_job_radar" / "config.py"
-DEFAULT_BATCH_FILE = Path(__file__).resolve().parent.parent / "batch_companies.txt"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
+CONFIG_PATH = ROOT_DIR / "gcc_job_radar" / "config.py"
+DEFAULT_BATCH_FILE = ROOT_DIR / "batch_companies.txt"
 
-from tools.discovery_utils import candidate_slugs, normalize_company_name as normalize
+try:
+    from tools.discovery_utils import candidate_slugs, normalize_company_name as normalize
+except ImportError:
+    from discovery_utils import candidate_slugs, normalize_company_name as normalize
 
 
 async def probe_ats_candidate(
