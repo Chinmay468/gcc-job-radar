@@ -369,6 +369,27 @@ async def test_bot_handle_command_applied(test_db_with_jobs: Path) -> None:
         assert "Celonis" in replies[1]
         assert "BT Group" in replies[1]
 
+        # 4. Call without leading slash (e.g. 'applied' or 'applies')
+        await handle_command(
+            command_text="applied",
+            chat_id="12345",
+            bot_token="test_token",
+            allowed_chat_id="12345",
+            client=client,
+            db_path=test_db_with_jobs,
+        )
+        assert "Your Applied Listings (2)" in replies[2]
+
+        await handle_command(
+            command_text="applies",
+            chat_id="12345",
+            bot_token="test_token",
+            allowed_chat_id="12345",
+            client=client,
+            db_path=test_db_with_jobs,
+        )
+        assert "Your Applied Listings (2)" in replies[3]
+
 
 @pytest.mark.asyncio
 async def test_ai_agent_get_applied_jobs_tool(test_db_with_jobs: Path) -> None:

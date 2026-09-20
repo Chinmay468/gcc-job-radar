@@ -349,7 +349,7 @@ async def handle_command(
                 bot_token, chat_id, reply, client, reply_markup={"inline_keyboard": keyboard}
             )
 
-    elif cmd in ("/applied", "/applications"):
+    elif cmd in ("/applied", "/applications", "applied", "applications", "applies"):
         applied_jobs = get_jobs_by_status("APPLIED", db_path=db_path)
         if not applied_jobs:
             reply = (
@@ -1523,7 +1523,19 @@ async def run_bot_listener(
                             )
                             continue
 
-                        # Fast-path 2: Natural language apply
+                        # Fast-path 2: Natural language applied list / applications view
+                        if re.match(r"^(?:show\s+|view\s+|get\s+|my\s+)?(?:applied|applies|applications?)(?:\s+(?:list|jobs|roles|history))?$", raw_lower):
+                            await handle_command(
+                                command_text="/applied",
+                                chat_id=chat_id,
+                                bot_token=bot_token,
+                                allowed_chat_id=allowed_chat_id,
+                                client=client,
+                                db_path=db_path,
+                            )
+                            continue
+
+                        # Fast-path 3: Natural language apply
                         is_nl_apply = (
                             re.search(r"\b(?:applied|aoplies|applies)(?:\s+opening)?(?:\s+so\s+mark\s+.*)?$", raw_lower)
                             or re.match(r"^(?:i\s+mean\s+)?(?:i\s+)?(?:have\s+|already\s+)?(?:applied|applies|apply)\s+(?:to\s+|for\s+)", raw_lower)

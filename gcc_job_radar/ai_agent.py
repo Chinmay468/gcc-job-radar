@@ -74,6 +74,7 @@ SYSTEM_PROMPT = (
     "- Use `tailor_job_resume` when the user asks to tailor, customize, adapt, or generate a resume/CV for a specific job (e.g. 'tailor my resume for Flipkart', 'generate a resume for job 1', 'tailor resume for Amazon SDE-1').\n"
     "- Use `sync_email_jobs` whenever the user asks to scan, check, go through, or ingest job alert emails (including LinkedIn, Naukri, Indeed, Glassdoor, and AccioJob emails) from their configured email accounts.\n"
     "- Use `scan_acciojob_portal` whenever the user asks to check, scan, or fetch fresh early-career tech jobs and hiring drives from the AccioJob portal.\n"
+    "- NEVER mention internal function or tool names (such as `manage_job_status`, `query_jobs`, `get_applied_jobs`, `sync_email_jobs`, `execute_tool`) to the user. Always advise the user using standard user-facing commands (e.g. `/apply <id>`, `/applied`, `/dismiss <id>`, `/scan`, `/sync`).\n"
     "- FILTERING APPLIED AND DISMISSED COMPANIES: By default, NEVER show or suggest roles or company names that the user has already marked as APPLIED or DISMISSED, unless the user specifically asks for 'all' (e.g. 'show all', 'all companies', 'include dismissed'). `query_jobs` and `get_configured_companies` accept `include_all`: only set `include_all=True` when specifically asked for all companies/jobs.\n\n"
     "DOMAIN KNOWLEDGE FOR COMPENSATION & CTC QUERIES IN INDIA:\n"
     "- When asked about compensation, CTC, or salary thresholds (e.g. 'which role offers CTC over 12 lakhs?'):\n"
