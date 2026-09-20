@@ -5747,8 +5747,22 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="Planhat", provider=ATSProvider.ASHBY, board_token="planhat"),
     CompanyConfig(name="SpotDraft", provider=ATSProvider.ASHBY, board_token="spotdraft"),
     CompanyConfig(name="Talon.One", provider=ATSProvider.GREENHOUSE, board_token="talonone"),
-    CompanyConfig(name="Sierra AI", provider=ATSProvider.CUSTOM, board_token="sierra-ai-hq", career_url="https://sierra-ai.com/careers"),
     CompanyConfig(name="Rampart", provider=ATSProvider.CUSTOM, board_token="rampartjobs", career_url="https://ramparttech.com/careers"),
+    CompanyConfig(name="GoComet", provider=ATSProvider.CUSTOM, board_token="gocomet", career_url="https://www.google.com/search?q=%22GoComet%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Appscrip", provider=ATSProvider.CUSTOM, board_token="appscrip", career_url="https://www.google.com/search?q=%22Appscrip%22+%22ReactJS+Developer%22+careers+jobs+apply"),
+    CompanyConfig(name="ReliaQuest", provider=ATSProvider.CUSTOM, board_token="reliaquest", career_url="https://www.google.com/search?q=%22ReliaQuest%22+%22Associate+Software+Engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Hewlett Packard Enterprise", provider=ATSProvider.CUSTOM, board_token="hewlettpackardenterprise", career_url="https://www.google.com/search?q=%22Hewlett+Packard+Enterprise%22+%22External+Intern%22+careers+jobs+apply"),
+    CompanyConfig(name="Creativano", provider=ATSProvider.CUSTOM, board_token="creativano", career_url="https://www.google.com/search?q=%22Creativano%22+%22Web+Developer%22+careers+jobs+apply"),
+    CompanyConfig(name="Docusign", provider=ATSProvider.CUSTOM, board_token="docusign", career_url="https://www.google.com/search?q=%22Docusign%22+%22Software+Engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Insurity", provider=ATSProvider.CUSTOM, board_token="insurity", career_url="https://www.google.com/search?q=%22Insurity%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Distributed Inc", provider=ATSProvider.CUSTOM, board_token="distributedinc", career_url="https://www.google.com/search?q=%22Distributed+Inc%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="BT Group", provider=ATSProvider.CUSTOM, board_token="btgroup", career_url="https://jobs.bt.com"),
+    CompanyConfig(name="UnknownStartupTech", provider=ATSProvider.CUSTOM, board_token="unknownstartuptech", career_url="https://www.google.com/search?q=%22UnknownStartupTech%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Acme GCC India", provider=ATSProvider.CUSTOM, board_token="acmegccindia", career_url="https://www.google.com/search?q=%22Acme+GCC+India%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Infosys GCC", provider=ATSProvider.CUSTOM, board_token="infosysgcc", career_url="https://www.infosys.com/careers"),
+    CompanyConfig(name="Beta GCC", provider=ATSProvider.CUSTOM, board_token="betagcc", career_url="https://www.google.com/search?q=%22Beta+GCC%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Acme Tech", provider=ATSProvider.CUSTOM, board_token="acmetech", career_url="https://www.google.com/search?q=%22Acme+Tech%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Google", provider=ATSProvider.CUSTOM, board_token="google", career_url="https://careers.google.com"),
 ]
 
 # Strict entry-level tech title positive pattern

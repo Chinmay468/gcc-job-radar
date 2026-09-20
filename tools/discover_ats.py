@@ -41,6 +41,7 @@ load_dotenv(ROOT_DIR / ".env")
 
 from gcc_job_radar.config import COMPANIES
 from gcc_job_radar.models import ATSProvider
+from tools.discovery_utils import candidate_slugs as get_candidate_slugs
 from tools.probe_ats import ProbeResult, append_to_config, deduplicate_results
 
 try:
@@ -240,24 +241,6 @@ def pipe_to_probe(
     except KeyboardInterrupt:
         console.print("\n[yellow][!] ATS probing interrupted by user.[/yellow]")
         return 130
-
-
-def get_candidate_slugs(name: str) -> list[str]:
-    """Generate candidate slug permutations (base, hyphenated, suffixes)."""
-    base = re.sub(r"[^a-zA-Z0-9]+", "", name.lower())
-    if not base or len(base) < 2:
-        return []
-
-    slugs = [base]
-    hyphen = re.sub(r"[^a-zA-Z0-9]+", "-", name.lower()).strip("-")
-    if hyphen != base and len(hyphen) >= 2:
-        slugs.append(hyphen)
-
-    if len(base) <= 12:
-        for suffix in ("hq", "ai", "io", "tech"):
-            slugs.append(f"{base}{suffix}")
-
-    return list(dict.fromkeys(slugs))
 
 
 def parse_yc_args(args: Optional[list[str]] = None) -> argparse.Namespace:

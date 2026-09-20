@@ -635,3 +635,106 @@ async def test_handle_command_sync_success(test_db_with_jobs: Path, monkeypatch:
     assert any("seen_jobs" in r for r in replies)
 
 
+@pytest.mark.asyncio
+async def test_handle_command_acciojob_portal(test_db_with_jobs: Path) -> None:
+    """Verify /accio triggers portal scrape pipeline and replies with formatted jobs."""
+    replies = []
+
+    async def mock_send_reply(token, cid, text, client, reply_markup=None):
+        replies.append(text)
+        return True
+
+    client = AsyncMock(spec=httpx.AsyncClient)
+    mock_postings = [
+        JobPosting(
+            id="reliaquest_ase",
+            company="ReliaQuest",
+            title="Associate Software Engineer",
+            location="Pune, India",
+            apply_url="https://example.com/rq",
+            provider=ATSProvider.ACCIOJOB,
+        )
+    ]
+
+    with patch("gcc_job_radar.bot_listener.send_telegram_reply", side_effect=mock_send_reply), \
+         patch("gcc_job_radar.bot_listener.send_telegram_chat_action", return_value=True), \
+         patch("tools.ingest_acciojob.run_acciojob_pipeline", return_value=mock_postings) as mock_run:
+        await handle_command(
+            command_text="/accio",
+            chat_id="12345",
+            bot_token="test_token",
+            allowed_chat_id="12345",
+            client=client,
+            db_path=test_db_with_jobs,
+        )
+
+    mock_run.assert_called_once_with(scrape=True, db_path=test_db_with_jobs)
+    assert any("AccioJob Verified Roles" in r for r in replies)
+    assert any("ReliaQuest" in r for r in replies)
+
+
+@pytest.mark.asyncio
+async def test_handle_command_acciojob_text_digest(test_db_with_jobs: Path) -> None:
+    """Verify /acciojob with pasted text digests extracts roles and replies."""
+    replies = []
+
+    async def mock_send_reply(token, cid, text, client, reply_markup=None):
+        replies.append(text)
+        return True
+
+    client = AsyncMock(spec=httpx.AsyncClient)
+    mock_postings = [
+        JobPosting(
+            id="appscrip_react",
+            company="Appscrip",
+            title="ReactJS Developer",
+            location="Remote, India",
+            apply_url="https://example.com/appscrip",
+            provider=ATSProvider.ACCIOJOB,
+        )
+    ]
+
+    with patch("gcc_job_radar.bot_listener.send_telegram_reply", side_effect=mock_send_reply), \
+         patch("gcc_job_radar.bot_listener.send_telegram_chat_action", return_value=True), \
+         patch("tools.ingest_acciojob.run_acciojob_pipeline", return_value=mock_postings) as mock_run:
+        await handle_command(
+            command_text="/acciojob Appscrip\tReactJS Developer\tReact.js\t19 Sept 2026\tCutshort.io",
+            chat_id="12345",
+            bot_token="test_token",
+            allowed_chat_id="12345",
+            client=client,
+            db_path=test_db_with_jobs,
+        )
+
+    assert mock_run.call_args[1]["scrape"] is False
+    assert "Appscrip" in mock_run.call_args[1]["raw_text"]
+    assert any("AccioJob Digest Roles" in r for r in replies)
+    assert any("Appscrip" in r for r in replies)
+
+
+@pytest.mark.asyncio
+async def test_execute_tool_scan_acciojob(test_db_with_jobs: Path) -> None:
+    """Verify AI Agent tool scan_acciojob_portal executes successfully."""
+    mock_postings = [
+        JobPosting(
+            id="docusign_sde",
+            company="Docusign",
+            title="Software Engineer",
+            location="Bengaluru, India",
+            apply_url="https://example.com/ds",
+            provider=ATSProvider.ACCIOJOB,
+        )
+    ]
+
+    with patch("tools.ingest_acciojob.run_acciojob_pipeline", return_value=mock_postings):
+        res = await execute_tool("scan_acciojob_portal", {}, db_path=test_db_with_jobs)
+        assert res["status"] == "success"
+        assert res["count"] == 1
+        assert res["jobs"][0]["company"] == "Docusign"
+
+        summary = format_tool_result_summary("scan_acciojob_portal", res)
+        assert "AccioJob Verified Openings" in summary
+        assert "Docusign" in summary
+
+
+

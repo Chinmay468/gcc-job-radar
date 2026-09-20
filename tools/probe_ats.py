@@ -48,42 +48,12 @@ DEFAULT_HEADERS = {
     "Accept": "application/json, text/plain, */*",
 }
 
-KNOWN_ABBREVIATIONS: dict[str, list[str]] = {
-    "texas instruments": ["ti"],
-    "western digital": ["wd"],
-    "hewlett packard": ["hp"],
-    "general electric": ["ge"],
-    "analog devices": ["adi"],
-    "applied materials": ["amat"],
-    "taiwan semiconductor": ["tsmc"],
-    "international business machines": ["ibm"],
-    "american express": ["amex"],
-    "standard chartered": ["scb", "stan-chart"],
-    "broadcom": ["broadcom"],
-    "micron": ["micron"],
-}
-
-CORPORATE_SUFFIXES = [
-    "inc",
-    "inc.",
-    "corporation",
-    "corp",
-    "corp.",
-    "llc",
-    "ltd",
-    "ltd.",
-    "technologies",
-    "technology",
-    "solutions",
-    "group",
-    "global",
-    "systems",
-    "software",
-    "holdings",
-    "international",
-    "services",
-    "enterprises",
-]
+from tools.discovery_utils import (
+    CORPORATE_SUFFIXES,
+    KNOWN_ABBREVIATIONS,
+    clean_company_name,
+    generate_slug_candidates,
+)
 
 
 @dataclass
@@ -94,69 +64,6 @@ class ProbeResult:
     provider: ATSProvider
     board_token: str
     active_postings: int
-
-
-def clean_company_name(name: str) -> str:
-    """Strip common corporate suffixes (Inc, Corp, Ltd, Technologies, etc.)."""
-    cleaned = name.strip()
-    words = cleaned.split()
-    while words and words[-1].lower().rstrip(".,") in CORPORATE_SUFFIXES:
-        words.pop()
-    return " ".join(words) if words else cleaned
-
-
-def generate_slug_candidates(company_name: str) -> list[str]:
-    """Generate standardized slug candidates pruned to top 2-3 most probable variations.
-
-    1. Exact cleaned lowercase alphanumeric (e.g. 'texasinstruments', 'westerndigital')
-    2. Hyphenated lowercase (e.g. 'texas-instruments', 'western-digital')
-    3. Known acronym / abbreviation (from KNOWN_ABBREVIATIONS or initials for multi-word brands)
-    """
-    candidates: list[str] = []
-    cleaned = clean_company_name(company_name)
-    if not cleaned:
-        return []
-
-    # 1. Exact cleaned lowercase alphanumeric
-    raw_alphanumeric = re.sub(r"[^a-zA-Z0-9]", "", cleaned).lower()
-    if raw_alphanumeric:
-        candidates.append(raw_alphanumeric)
-
-    # 2. Hyphenated lowercase
-    hyphenated = re.sub(r"[^a-zA-Z0-9]+", "-", cleaned.strip()).strip("-").lower()
-    if hyphenated and hyphenated != raw_alphanumeric:
-        candidates.append(hyphenated)
-
-    # 3. Known acronym / abbreviation or initials
-    cleaned_lower = cleaned.lower()
-    orig_lower = company_name.strip().lower()
-
-    # Check known abbreviations dictionary
-    known_abbrs: list[str] = []
-    for key, abbr_list in KNOWN_ABBREVIATIONS.items():
-        if key in (cleaned_lower, orig_lower):
-            known_abbrs.extend(abbr_list)
-            break
-
-    for abbr in known_abbrs:
-        if abbr not in candidates and len(candidates) < 3:
-            candidates.append(abbr)
-
-    if len(candidates) < 3:
-        words = re.findall(r"[a-zA-Z0-9]+", cleaned)
-        if len(words) >= 2:
-            initials = "".join(w[0] for w in words).lower()
-            if 2 <= len(initials) <= 4 and initials not in candidates:
-                candidates.append(initials)
-
-    # 4. If space permits (< 3), include uncleaned alphanumeric (e.g. 'alphacorp' for 'Alpha Corp')
-    if len(candidates) < 3:
-        raw_full = re.sub(r"[^a-zA-Z0-9]", "", company_name).lower()
-        if raw_full and raw_full not in candidates:
-            candidates.append(raw_full)
-
-    # Deduplicate while preserving order, cap at top 3
-    return list(dict.fromkeys(candidates))[:3]
 
 
 async def check_platform(

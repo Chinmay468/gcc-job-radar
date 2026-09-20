@@ -198,6 +198,28 @@ class CustomCareerClient(BaseATSClient):
                 if DISQUALIFIED_PATH_PATTERN.search(parsed_path):
                     continue
 
+                # Disqualify if title or enclosing card text explicitly contains foreign locations without Indian presence
+                text_lower = text.lower()
+                parent_text = ""
+                if link.parent and link.parent.name in ("li", "div", "tr", "article", "p", "section"):
+                    if len(link.parent.find_all("a")) == 1:
+                        parent_text = link.parent.get_text(separator=" ", strip=True).lower()
+                combined_text = f"{text_lower} {parent_text}".strip()
+                foreign_indicators = (
+                    "san francisco", "california", " ca", ", ca", "new york", " ny", ", ny",
+                    "singapore", "london", "seattle", "austin", "chicago", "dublin",
+                    "berlin", "tokyo", "sydney", "toronto", "vancouver", "paris",
+                    "madrid", "munich", "amsterdam", "zurich", "united states", "usa",
+                    "united kingdom", "canada", "germany", "australia",
+                )
+                indian_indicators = (
+                    "india", "bangalore", "bengaluru", "hyderabad", "pune", "mumbai",
+                    "chennai", "noida", "gurgaon", "gurugram", "delhi", "ahmedabad",
+                    "kolkata", "remote"
+                )
+                if any(fi in combined_text for fi in foreign_indicators) and not any(ii in combined_text for ii in indian_indicators):
+                    continue
+
                 clean_url = canonicalize_url(full_url)
                 if clean_url in seen_urls:
                     continue
@@ -207,12 +229,18 @@ class CustomCareerClient(BaseATSClient):
                 job_hash = hashlib.sha256(clean_url.encode("utf-8")).hexdigest()[:10]
                 job_id = f"custom_{clean_slug}_{job_hash}"
 
+                detected_location = "India"
+                for city in ("Bengaluru", "Bangalore", "Hyderabad", "Pune", "Mumbai", "Chennai", "Noida", "Gurgaon", "Gurugram", "Delhi"):
+                    if city.lower() in combined_text:
+                        detected_location = f"{city}, India"
+                        break
+
                 try:
                     posting = JobPosting(
                         id=job_id,
                         company=company_name,
                         title=text,
-                        location="India",
+                        location=detected_location,
                         apply_url=clean_url,
                         published_date="Recent",
                         provider=ATSProvider.CUSTOM,

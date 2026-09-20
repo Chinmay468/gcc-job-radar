@@ -1,6 +1,5 @@
 """"Apple Careers ATS client using Remix SSR hydration data."""
 
-from datetime import datetime
 import logging
 import re
 from typing import Any
@@ -9,12 +8,6 @@ import orjson
 from pydantic import ValidationError
 
 from gcc_job_radar.clients.base import BaseATSClient
-from gcc_job_radar.filters import (
-    is_tech_role,
-    matches_india_location,
-    matches_target_title,
-    requires_experienced_candidate,
-)
 from gcc_job_radar.models import ATSProvider, CompanyConfig, JobPosting
 
 logger = logging.getLogger(__name__)
@@ -120,43 +113,17 @@ class AppleClient(BaseATSClient):
                     else:
                         location = "India"
 
-                    if not matches_target_title(title):
-                        continue
-
-                    if not is_tech_role(title):
-                        continue
-
-                    if not matches_india_location(location):
-                        continue
-
                     team_info = job.get("team")
                     team_name = team_info.get("teamName") if isinstance(team_info, dict) else ""
                     content = f"{title} {team_name or ''}".strip()
-                    if requires_experienced_candidate(content):
+
+                    if not self.is_target_role(title, location, content):
                         continue
 
                     apply_id = position_id or job_id
                     apply_url = f"https://jobs.apple.com/en-in/details/{apply_id}"
 
-                    raw_date = (job.get("postingDate") or "").strip()
-                    published_date = "Recent"
-                    if raw_date:
-                        clean_date = re.sub(r"\bSept\b", "Sep", raw_date)
-                        clean_date = re.sub(r"\s+", " ", clean_date).strip()
-                        for fmt in (
-                            "%d %b %Y",
-                            "%d %B %Y",
-                            "%B %d, %Y",
-                            "%Y-%m-%d",
-                            "%b %d, %Y",
-                        ):
-                            try:
-                                published_date = datetime.strptime(
-                                    clean_date, fmt
-                                ).strftime("%Y-%m-%d")
-                                break
-                            except (ValueError, TypeError):
-                                continue
+                    published_date = self.parse_date(job.get("postingDate"))
 
                     try:
                         postings.append(

@@ -8,12 +8,6 @@ import orjson
 from pydantic import ValidationError
 
 from gcc_job_radar.clients.base import BaseATSClient
-from gcc_job_radar.filters import (
-    is_tech_role,
-    matches_india_location,
-    matches_target_title,
-    requires_experienced_candidate,
-)
 from gcc_job_radar.models import ATSProvider, CompanyConfig, JobPosting
 
 logger = logging.getLogger(__name__)
@@ -97,18 +91,9 @@ class MicrosoftClient(BaseATSClient):
                             loc_list.append(val.strip())
                     location = ", ".join(dict.fromkeys(loc_list)) if loc_list else "India"
 
-                    if not matches_target_title(title):
-                        continue
-
-                    if not is_tech_role(title):
-                        continue
-
-                    if not matches_india_location(location):
-                        continue
-
                     dept = job.get("department") or ""
                     content = f"{title} {dept}".strip()
-                    if requires_experienced_candidate(content):
+                    if not self.is_target_role(title, location, content):
                         continue
 
                     pos_url = job.get("positionUrl") or f"/careers/job/{job_id}"

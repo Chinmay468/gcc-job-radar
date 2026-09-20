@@ -205,6 +205,39 @@ async def test_scan_debounce(sample_jobs: list[JobPosting]) -> None:
 
 
 @pytest.mark.asyncio
+async def test_scan_debounce_different_companies_allowed(sample_jobs: list[JobPosting]) -> None:
+    """Verify scanning different companies sequentially is not blocked by debounce."""
+    captured_messages = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        data = json.loads(request.content.decode("utf-8"))
+        captured_messages.append(data)
+        return httpx.Response(200, json={"ok": True})
+
+    async def mock_scan(*args, **kwargs):
+        return sample_jobs
+
+    import gcc_job_radar.bot_listener as bl
+    bl._last_scan_timestamp = 0.0
+    bl._last_scan_scope = ""
+    bl._last_scan_label = ""
+    bl._is_scanning = False
+
+    with patch("gcc_job_radar.bot_listener.scan_all_companies", side_effect=mock_scan):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            # First scan stripe
+            await handle_command("/scan stripe", "123456", "token", "123456", client)
+            stripe_msgs = len(captured_messages)
+            assert any("Stripe" in msg["text"] for msg in captured_messages)
+
+            # Second scan for a different company immediately after should NOT be blocked by debounce
+            await handle_command("/scan databricks", "123456", "token", "123456", client)
+            new_msgs = captured_messages[stripe_msgs:]
+            assert not any("just completed seconds ago" in msg["text"] for msg in new_msgs)
+            assert any("Databricks" in msg["text"] for msg in new_msgs)
+
+
+@pytest.mark.asyncio
 async def test_clear_command() -> None:
     """Verify /clear resets chat history and replies."""
     captured_messages = []
@@ -952,11 +985,12 @@ async def test_sync_telegram_bot_commands() -> None:
         assert ok is True
         assert captured_payload is not None
         cmds = captured_payload.get("commands", [])
-        assert len(cmds) == 9
+        assert len(cmds) == 10
         cmd_names = [c["command"] for c in cmds]
         assert "scan" in cmd_names
         assert "latest" in cmd_names
         assert "email" in cmd_names
+        assert "accio" in cmd_names
         assert "tailor" in cmd_names
         assert "applied" in cmd_names
         assert "followups" in cmd_names

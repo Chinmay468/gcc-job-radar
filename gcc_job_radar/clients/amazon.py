@@ -1,20 +1,12 @@
 """Amazon Jobs ATS API client."""
 
-from datetime import datetime
 import logging
-import re
 from typing import Any
 import httpx
 import orjson
 from pydantic import ValidationError
 
 from gcc_job_radar.clients.base import BaseATSClient
-from gcc_job_radar.filters import (
-    is_tech_role,
-    matches_india_location,
-    matches_target_title,
-    requires_experienced_candidate,
-)
 from gcc_job_radar.models import ATSProvider, CompanyConfig, JobPosting
 
 logger = logging.getLogger(__name__)
@@ -98,21 +90,12 @@ class AmazonClient(BaseATSClient):
                         or "India"
                     ).strip()
 
-                    if not matches_target_title(title):
-                        continue
-
-                    if not is_tech_role(title):
-                        continue
-
-                    if not matches_india_location(location):
-                        continue
-
                     desc = job.get("description") or ""
                     basic_qual = job.get("basic_qualifications") or ""
                     pref_qual = job.get("preferred_qualifications") or ""
                     content = f"{desc} {basic_qual} {pref_qual}".strip()
 
-                    if requires_experienced_candidate(content):
+                    if not self.is_target_role(title, location, content):
                         continue
 
                     job_path = job.get("job_path") or f"/en/jobs/{job_id}"
@@ -121,16 +104,7 @@ class AmazonClient(BaseATSClient):
                     else:
                         apply_url = f"https://www.amazon.jobs{job_path}"
 
-                    posted_date = (job.get("posted_date") or "").strip()
-                    published_date = "Recent"
-                    if posted_date:
-                        try:
-                            clean_date = re.sub(r"\s+", " ", posted_date)
-                            published_date = datetime.strptime(
-                                clean_date, "%B %d, %Y"
-                            ).strftime("%Y-%m-%d")
-                        except (ValueError, TypeError):
-                            published_date = posted_date[:10]
+                    published_date = self.parse_date(job.get("posted_date"))
 
                     try:
                         postings.append(

@@ -44,6 +44,7 @@ for _stream_name in ("stdout", "stderr"):
 from gcc_job_radar.config import COMPANIES
 from gcc_job_radar.dormant_companies import DORMANT_COMPANIES
 from gcc_job_radar.models import ATSProvider
+from tools.discovery_utils import clean_company_name
 from tools.harvest_mass_ats import extract_slug_from_url
 
 logging.basicConfig(
@@ -80,16 +81,6 @@ class VerifiedBoard(NamedTuple):
     board_token: str
     active_jobs: int
 
-
-def clean_company_name(name: str) -> str:
-    """Normalize company name and strip legal and marketing noise."""
-    name = re.sub(r'[\r\n\t\\"]+', " ", name)
-    name = re.sub(
-        r"(?i)\b(pvt\.?\s*ltd\.?|private\s+limited|inc\.?|llc|llp|corp\.?|corporation|technologies|solutions|group)\b",
-        "",
-        name,
-    ).strip(" ,.-/()[]{}'\"")
-    return re.sub(r"\s+", " ", name).strip()
 
 
 def generate_permutations(name: str) -> list[str]:

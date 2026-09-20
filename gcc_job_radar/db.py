@@ -54,6 +54,20 @@ def canonicalize_url(url: str) -> str:
         if m_li:
             return f"https://www.linkedin.com/jobs/view/{m_li.group(1)}/"
 
+        # Preserve Google search queries for fallback direct career searches
+        if "google." in netloc and "/search" in parsed.path:
+            query_dict = urllib.parse.parse_qs(parsed.query, keep_blank_values=False)
+            q_val = query_dict.get("q", [""])[0]
+            if q_val:
+                return f"https://www.google.com/search?q={urllib.parse.quote_plus(q_val)}"
+
+        # Preserve AccioMatrix / AccioJob assessment tokens
+        if "acciomatrix." in netloc or "acciojob." in netloc:
+            query_dict = urllib.parse.parse_qs(parsed.query, keep_blank_values=False)
+            clean_q = {k: v for k, v in query_dict.items() if k.lower() in ("token", "id", "url")}
+            if clean_q:
+                return urllib.parse.urlunparse((parsed.scheme.lower(), netloc, parsed.path.rstrip("/"), "", urllib.parse.urlencode(clean_q, doseq=True), ""))
+
         path = parsed.path.rstrip("/")
         # Standard ATS paths (Greenhouse, Lever, Ashby, Workday) identify the job listing in the path.
         clean_url = urllib.parse.urlunparse(
@@ -276,30 +290,14 @@ def init_db(db_path: Optional[Path] = None) -> None:
 
     with sqlite3.connect(target_path) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS seen_jobs (
-                id TEXT PRIMARY KEY,
-                company TEXT NOT NULL,
-                title TEXT NOT NULL,
-                location TEXT NOT NULL,
-                apply_url TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                published_date TEXT,
-                application_start_date TEXT,
-                application_end_date TEXT,
-                is_active INTEGER DEFAULT 1,
-                is_remote INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'NEW',
-                applied_at TIMESTAMP NULL,
-                notes TEXT NULL,
-                direct_search_url TEXT NULL,
-                relevance_score INTEGER DEFAULT 0,
-                first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """
+        from gcc_job_radar.schema import (
+            BASE_TABLE_STATEMENTS,
+            INDEX_AND_VIEW_STATEMENTS,
+            UNIQUE_INDEX_STATEMENTS,
         )
+        for statement in BASE_TABLE_STATEMENTS:
+            cursor.execute(statement)
+
         # Migrate columns if missing from earlier migrations
         for tbl in ("seen_jobs", "jobs"):
             cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{tbl}'")
@@ -325,8 +323,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 if "application_end_date" not in columns:
                     cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN application_end_date TEXT NULL")
 
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_seen_jobs_status ON seen_jobs(status);")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_seen_jobs_end_date ON seen_jobs(application_end_date);")
+        for statement in INDEX_AND_VIEW_STATEMENTS:
+            cursor.execute(statement)
         # Recreate jobs view to expose direct_search_url and rowid as numeric_id
         cursor.execute("DROP VIEW IF EXISTS jobs;")
         cursor.execute("CREATE VIEW jobs AS SELECT rowid AS numeric_id, * FROM seen_jobs;")
@@ -366,47 +364,6 @@ def init_db(db_path: Optional[Path] = None) -> None:
             """
         )
 
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS dispatched_alerts (
-                job_id TEXT NOT NULL,
-                platform TEXT NOT NULL,
-                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (job_id, platform)
-            );
-            """
-        )
-        cursor.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_dispatched_alerts_platform ON dispatched_alerts(platform);
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS seen_emails (
-                uid TEXT PRIMARY KEY,
-                processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """
-        )
-        cursor.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_seen_emails_uid ON seen_emails(uid);
-            """
-        )
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS dormant_companies (
-                company_name TEXT PRIMARY KEY,
-                reason TEXT,
-                paused_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                consecutive_zero_scans INTEGER DEFAULT 0,
-                is_active INTEGER DEFAULT 0,
-                notes TEXT
-            );
-            """
-        )
         from gcc_job_radar.dormant_companies import DORMANT_REGISTRY
         for entry in DORMANT_REGISTRY:
             cursor.execute(
@@ -417,25 +374,6 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 (entry.config.name, entry.reason, entry.paused_at, entry.notes),
             )
 
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS apply_prep_attempts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                job_id TEXT NOT NULL,
-                company TEXT NOT NULL,
-                title TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                status TEXT NOT NULL,
-                details TEXT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """
-        )
-        cursor.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_apply_prep_job_id ON apply_prep_attempts(job_id);
-            """
-        )
         conn.commit()
 
     # Clean up any existing duplicate entries
@@ -443,17 +381,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
 
     with sqlite3.connect(target_path) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_seen_jobs_company ON seen_jobs(company);
-            """
-        )
-        cursor.execute(
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_seen_jobs_company_title_loc 
-            ON seen_jobs(lower(company), lower(title), lower(location));
-            """
-        )
+        for statement in UNIQUE_INDEX_STATEMENTS:
+            cursor.execute(statement)
         conn.commit()
 
     # Sync pre-configured / git-tracked dismissals across all environments on the primary database

@@ -81,9 +81,15 @@ KNOWN_ALERT_SENDERS = [
     "noreply@glassdoor.com",
     "jobalerts@glassdoor.com",
     "alerts@glassdoor.com",
+    "donotreply@acciojob.com",
+    "alerts@acciojob.com",
+    "jobs@acciojob.com",
+    "team@acciojob.com",
+    "updates@acciojob.com",
+    "no-reply@acciojob.com",
 ]
 
-ALERT_IMAP_FILTER = '(OR (FROM "jobalerts-noreply@linkedin.com") (OR (FROM "naukri.com") (OR (FROM "indeed.com") (FROM "glassdoor.com"))))'
+ALERT_IMAP_FILTER = '(OR (FROM "jobalerts-noreply@linkedin.com") (OR (FROM "naukri.com") (OR (FROM "indeed.com") (OR (FROM "glassdoor.com") (FROM "acciojob.com")))))'
 
 TRACKING_QUERY_PARAMS = {
     "trk",
@@ -620,6 +626,170 @@ def parse_schema_org_json_ld(html_content: str) -> list[RawParsedJob]:
     return jobs
 
 
+def parse_acciojob_alert_html(
+    html_content: str,
+    sender: str = "",
+    subject: str = "",
+) -> list[RawParsedJob]:
+    """Extract job cards, assessment invitations, and curated partner drives from AccioJob emails."""
+    jobs: list[RawParsedJob] = []
+    seen_keys: set[tuple[str, str]] = set()
+
+    subj_clean = clean_text_punctuation(subject)
+
+    # 1. Skip non-job messages (OTP codes, password resets, verification)
+    if re.search(r"\b(otp|verification\s*code|reset\s*password|login\s*code)\b", subj_clean, re.I):
+        return []
+
+    # 2. Case A: Assessment Invitation Email
+    # e.g. Subject: "Assessment Link for GoComet | Full Stack Developer Intern | Slot 1st"
+    # Or: "GoComet | Full Stack Developer Intern | Slot 1 Assessment Link"
+    m_assess = re.search(
+        r"(?:Assessment\s+Link\s+for\s+)?(?P<comp>[^|]+?)\s*\|\s*(?P<role>[^|]+?)(?:\s*\|\s*(?P<extra>.*))?$",
+        subj_clean,
+        re.I,
+    )
+    if not m_assess:
+        # Check inside HTML <title>
+        m_title = re.search(
+            r"<title>(?:Assessment\s+Link\s+for\s+)?(?P<comp>[^|]+?)\s*\|\s*(?P<role>[^|<]+?)(?:\s*\|\s*[^<]*)?</title>",
+            html_content,
+            re.I,
+        )
+        if m_title:
+            m_assess = m_title
+
+    if m_assess:
+        comp_candidate = clean_text_punctuation(m_assess.group("comp"))
+        role_candidate = clean_text_punctuation(m_assess.group("role"))
+
+        # Clean off trailing words like "Assessment Link" from role or company
+        role_candidate = re.sub(r"(?i)\s+assessment\s+link.*$", "", role_candidate).strip()
+        comp_candidate = re.sub(r"(?i)^assessment\s+link\s+for\s+", "", comp_candidate).strip()
+
+        if (
+            comp_candidate
+            and role_candidate
+            and not re.search(r"\b(otp|matrix|login|acciojob)\b", comp_candidate, re.I)
+        ):
+            # Find assessment link in body
+            apply_url = ""
+            m_link = re.search(
+                r"""<a[^>]+href=["'](?P<url>[^"']*(?:azurecomm\.net|acciomatrix\.com|acciojob\.com|interviewbit|hackerearth|unstop)[^"']*)["'][^>]*>(?P<text>.*?)</a>""",
+                html_content,
+                re.I | re.DOTALL,
+            )
+            if m_link:
+                raw_url = html.unescape(m_link.group("url"))
+                unwrapped = unwrap_destination_url(raw_url)
+                apply_url = unwrapped or strip_tracking_params(raw_url)
+            else:
+                for m_a in re.finditer(r"""<a[^>]+href=["'](?P<url>https?://[^"']+)["'][^>]*>""", html_content, re.I):
+                    candidate_u = html.unescape(m_a.group("url"))
+                    if "contact" not in candidate_u and "support" not in candidate_u:
+                        unwrapped = unwrap_destination_url(candidate_u)
+                        apply_url = unwrapped or strip_tracking_params(candidate_u)
+                        break
+
+            if not apply_url:
+                apply_url = build_direct_search_url(comp_candidate, role_candidate)
+
+            key = (comp_candidate.lower(), role_candidate.lower())
+            if key not in seen_keys:
+                seen_keys.add(key)
+                jobs.append(
+                    RawParsedJob(
+                        title=role_candidate,
+                        company=comp_candidate,
+                        location="India",
+                        url=apply_url,
+                        source_platform="acciojob",
+                        snippet=f"Assessment Link: {comp_candidate} | {role_candidate}",
+                        direct_search_url=build_direct_search_url(comp_candidate, role_candidate),
+                    )
+                )
+
+    # 3. Case B: Curated Partner Listings / Digest Tables
+    # Pattern 1: TSV / Text table (Company\tRole\t\nSkills\nDate\tSource)
+    table_pattern = re.compile(
+        r"([^\t\n\r]+)\t([^\t\n\r]+)\t\s*\n([\s\S]*?)\n([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})\t([^\t\n\r]+)\t?",
+        re.MULTILINE,
+    )
+    for m in table_pattern.finditer(html_content):
+        comp, role, skills, date_str, src = m.groups()
+        comp_clean = clean_text_punctuation(comp)
+        role_clean = clean_text_punctuation(role)
+        skills_clean = clean_text_punctuation(skills).replace("\n", ", ")
+        src_clean = clean_text_punctuation(src)
+
+        # Skip promotional ads (e.g. Fast Track Placement Program)
+        if any(w in comp_clean.lower() for w in ("fast track", "placement program", "scholarship", "acciojob")):
+            continue
+
+        key = (comp_clean.lower(), role_clean.lower())
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+
+        apply_url = build_direct_careers_search_url(comp_clean, role_clean)
+        jobs.append(
+            RawParsedJob(
+                title=role_clean,
+                company=comp_clean,
+                location="India",
+                url=apply_url,
+                source_platform="acciojob",
+                date_str=date_str.strip(),
+                snippet=f"Skills: {skills_clean} | Source: {src_clean}",
+                direct_search_url=build_direct_search_url(comp_clean, role_clean),
+            )
+        )
+
+    # Pattern 2: HTML Table Rows: <tr>...<td>Company</td><td>Role</td>...</tr>
+    row_pattern = re.compile(r"<tr[^>]*>([\s\S]*?)</tr>", re.I)
+    for row_m in row_pattern.finditer(html_content):
+        row_html = row_m.group(1)
+        tds = re.findall(r"<td[^>]*>([\s\S]*?)</td>", row_html, re.I)
+        if len(tds) >= 2:
+            lines0 = extract_text_lines(tds[0])
+            lines1 = extract_text_lines(tds[1])
+            comp_name = lines0[0] if lines0 else ""
+            role_title = lines1[0] if lines1 else ""
+
+            if not comp_name or not role_title or len(comp_name) < 2 or len(role_title) < 2:
+                continue
+            if any(w in comp_name.lower() for w in ("company", "fast track", "placement", "acciojob")):
+                continue
+
+            row_url = ""
+            m_a = re.search(r"""href=["'](?P<url>https?://[^"']+)["']""", row_html, re.I)
+            if m_a:
+                row_url = strip_tracking_params(html.unescape(m_a.group("url")))
+            else:
+                row_url = build_direct_careers_search_url(comp_name, role_title)
+
+            skills_text = " | ".join(extract_text_lines(" ".join(tds[2:]))) if len(tds) > 2 else ""
+
+            key = (comp_name.lower(), role_title.lower())
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+
+            jobs.append(
+                RawParsedJob(
+                    title=role_title,
+                    company=comp_name,
+                    location="India",
+                    url=row_url,
+                    source_platform="acciojob",
+                    snippet=skills_text,
+                    direct_search_url=build_direct_search_url(comp_name, role_title),
+                )
+            )
+
+    return jobs
+
+
 def parse_email_alert_html(
     html_content: str,
     sender: str = "",
@@ -638,6 +808,8 @@ def parse_email_alert_html(
         jobs.extend(parse_indeed_alert_html(html_content))
     elif "glassdoor" in sender_lower:
         jobs.extend(parse_glassdoor_alert_html(html_content))
+    elif "acciojob" in sender_lower or "acciomatrix" in sender_lower or "acciojob" in subject.lower():
+        jobs.extend(parse_acciojob_alert_html(html_content, sender=sender, subject=subject))
 
     # 2. If no jobs found, attempt schema.org json-ld
     if not jobs:
@@ -649,6 +821,7 @@ def parse_email_alert_html(
         jobs.extend(parse_naukri_alert_html(html_content))
         jobs.extend(parse_indeed_alert_html(html_content))
         jobs.extend(parse_glassdoor_alert_html(html_content))
+        jobs.extend(parse_acciojob_alert_html(html_content, sender=sender, subject=subject))
 
     return jobs
 
@@ -693,7 +866,10 @@ def filter_and_convert_jobs(
             continue
 
         # Check entry-level qualification; pass snippet as content for generic-title fallback
-        if not is_entry_level(clean_title, content=snippet or None):
+        is_acciojob = item.source_platform == "acciojob"
+        eval_content = f"fresher entry-level 0-2 years {snippet}" if is_acciojob else (snippet or None)
+
+        if not is_entry_level(clean_title, content=eval_content):
             logger.debug("Filtered out non-entry-level role: '%s'", clean_title)
             continue
 
@@ -766,6 +942,15 @@ def filter_and_convert_jobs(
                 direct_search_url=direct_search,
             )
             qualified.append(posting)
+
+            # Auto-register qualified new company into config.COMPANIES registry if not already tracked
+            try:
+                from gcc_job_radar.company_tracker import is_known_company, register_hiring_company
+                if not is_known_company(clean_company):
+                    register_hiring_company(clean_company, career_url=clean_url if "careers" in clean_url else None)
+            except Exception as exc:
+                logger.debug("Error auto-registering company %s: %s", clean_company, exc)
+
         except Exception as exc:
             logger.debug("Error creating JobPosting for %s: %s", clean_title, exc)
 

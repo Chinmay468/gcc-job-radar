@@ -985,3 +985,80 @@ def test_sync_email_alerts_notify(tmp_path: Path):
         assert mock_dispatch.called
 
 
+# ==============================================================================
+# 7. AccioJob Email Ingestion Tests
+# ==============================================================================
+
+def test_parse_acciojob_alert_html_assessment_invitation():
+    """Verify parse_acciojob_alert_html extracts assessment invitation details and unwraps URLs."""
+    html_content = (
+        '<!DOCTYPE html><html><head><title>GoComet | Full Stack Developer Intern | Slot 1 Assessment Link</title></head>'
+        '<body><div class="header">GoComet | Full Stack Developer Intern</div>'
+        '<a href="https://acciojob-communications-prod.action.azurecomm.net/api/v2/a/c?url=https%3a%2f%2facciomatrix.com%2fverify-candidate%2fe8da110b-4325">'
+        'Start Assessment</a></body></html>'
+    )
+    from tools.ingest_email import parse_acciojob_alert_html
+
+    jobs = parse_acciojob_alert_html(
+        html_content,
+        sender="DoNotReply@acciojob.com",
+        subject="Assessment Link for GoComet | Full Stack Developer Intern | Slot 1st",
+    )
+    assert len(jobs) == 1
+    job = jobs[0]
+    assert job.company == "GoComet"
+    assert job.title == "Full Stack Developer Intern"
+    assert "acciomatrix.com/verify-candidate/e8da110b-4325" in job.url
+    assert job.source_platform == "acciojob"
+    assert job.location == "India"
+
+
+def test_parse_acciojob_alert_html_digest_table():
+    """Verify parse_acciojob_alert_html parses TSV/text table digests from AccioJob."""
+    raw_text = (
+        "ReliaQuest\tAssociate Software Engineer\t\n"
+        "Java\nSpringBoot\n"
+        "19 Sept 2026\tCompany's Career Page\t\n"
+        "⚡ Fast Track Placement Program\n₹55,000\t\n"
+        "Docusign\tSoftware Engineer\t\n"
+        "React\nNode.js\n"
+        "19 Sept 2026\tCompany's Career Page\t"
+    )
+    from tools.ingest_email import parse_acciojob_alert_html
+
+    jobs = parse_acciojob_alert_html(raw_text, sender="alerts@acciojob.com", subject="Daily Job Alert")
+    assert len(jobs) == 2
+    comps = {j.company for j in jobs}
+    assert "ReliaQuest" in comps
+    assert "Docusign" in comps
+    # Fast Track promo should be excluded
+    assert not any("fast track" in j.company.lower() for j in jobs)
+
+
+def test_parse_acciojob_alert_html_skips_otp():
+    """Verify parse_acciojob_alert_html ignores OTP and verification messages."""
+    from tools.ingest_email import parse_acciojob_alert_html
+
+    jobs = parse_acciojob_alert_html(
+        "<div>Your OTP is 123456</div>",
+        sender="DoNotReply@acciojob.com",
+        subject="Login OTP for AccioMatrix",
+    )
+    assert jobs == []
+
+
+def test_parse_email_alert_html_routes_acciojob():
+    """Verify parse_email_alert_html routes AccioJob senders to parse_acciojob_alert_html."""
+    from tools.ingest_email import parse_email_alert_html
+
+    html = '<a href="https://acciomatrix.com/test">Start Assessment</a>'
+    jobs = parse_email_alert_html(
+        html,
+        sender="donotreply@acciojob.com",
+        subject="Assessment Link for TechCorp | SDE 1 Intern",
+    )
+    assert len(jobs) == 1
+    assert jobs[0].company == "TechCorp"
+    assert jobs[0].title == "SDE 1 Intern"
+
+

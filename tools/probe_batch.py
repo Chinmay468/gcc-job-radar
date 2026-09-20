@@ -38,40 +38,7 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / "gcc_job_radar" / "config
 DEFAULT_BATCH_FILE = Path(__file__).resolve().parent.parent / "batch_companies.txt"
 
 
-def normalize(name: str) -> str:
-    n = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("utf-8")
-    return re.sub(r"[^a-z0-9]", "", n.lower())
-
-
-def candidate_slugs(raw_name: str) -> list[str]:
-    raw_name = raw_name.strip()
-    slugs = set()
-    cleaned = raw_name.lower().replace("&", "and").replace("+", "plus").replace(".ai", "ai").replace(".cloud", "cloud").replace(".com", "").replace(".ag", "ag").replace(".farm", "farm").replace("°", "")
-    cleaned = unicodedata.normalize("NFKD", cleaned).encode("ascii", "ignore").decode("utf-8")
-
-    alphanumeric = re.sub(r"[^a-z0-9]+", "", cleaned)
-    if alphanumeric:
-        slugs.add(alphanumeric)
-        slugs.add(f"{alphanumeric}hq")
-        slugs.add(f"{alphanumeric}tech")
-        slugs.add(f"{alphanumeric}careers")
-        slugs.add(f"{alphanumeric}jobs")
-
-    hyphenated = re.sub(r"[^a-z0-9]+", "-", cleaned).strip("-")
-    if hyphenated and hyphenated != alphanumeric:
-        slugs.add(hyphenated)
-        slugs.add(f"{hyphenated}-hq")
-        slugs.add(f"{hyphenated}-careers")
-
-    for suffix in ["labs", "technologies", "technology", "robotics", "aerospace", "digital", "systems", "software"]:
-        if suffix in raw_name.lower():
-            no_suf = re.sub(rf"\b{suffix}\b", "", raw_name, flags=re.I).strip()
-            no_suf_clean = re.sub(r"[^a-z0-9]+", "", no_suf.lower())
-            if no_suf_clean:
-                slugs.add(no_suf_clean)
-                slugs.add(re.sub(r"[^a-z0-9]+", "-", no_suf.lower()).strip("-"))
-
-    return [s for s in slugs if s and len(s) >= 2]
+from tools.discovery_utils import candidate_slugs, normalize_company_name as normalize
 
 
 async def probe_ats_candidate(

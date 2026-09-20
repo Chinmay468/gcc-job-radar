@@ -241,3 +241,43 @@ async def test_custom_career_filters_landing_pages_pdfs_and_generates_determinis
             assert jid.startswith("custom_testcompany_")
 
 
+@pytest.mark.asyncio
+async def test_custom_career_foreign_location_filtering():
+    """Verify that roles explicitly in foreign locations (e.g. SF, NY, Singapore) are rejected."""
+    sample_html = """
+    <html>
+    <body>
+        <a href="/jobs/1">Software Engineer, Agent (New Grad 2027) San Francisco, CA • New York, NY</a>
+        <a href="/jobs/2">Software Engineer, Agent (New Grad 2027) Singapore</a>
+        <a href="/jobs/3">Software Engineer Intern, Agent (Summer 2027) London</a>
+        <a href="/jobs/4">Associate Software Engineer - Bengaluru, India</a>
+        <div>
+            <a href="/jobs/5">Junior Backend Engineer</a>
+            <span>Location: Pune, India</span>
+        </div>
+        <div>
+            <a href="/jobs/6">Frontend Engineer I</a>
+            <span>Location: Seattle, WA</span>
+        </div>
+    </body>
+    </html>
+    """
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=sample_html, headers={"content-type": "text/html"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as http_client:
+        client = CustomCareerClient(http_client)
+        postings = await client.fetch_jobs("GlobalCorp", "https://globalcorp.com/careers")
+
+        # Only the 2 Indian postings should be kept (job 4 and job 5)
+        assert len(postings) == 2
+        titles = [p.title for p in postings]
+        assert "Associate Software Engineer - Bengaluru, India" in titles
+        assert "Junior Backend Engineer" in titles
+        assert not any("San Francisco" in t for t in titles)
+        assert not any("Singapore" in t for t in titles)
+        assert not any("London" in t for t in titles)
+        assert not any("Seattle" in t for t in titles)
+
+

@@ -9,7 +9,12 @@ from rich.console import Console
 
 from gcc_job_radar.link_resolver import resolve_effective_apply_url
 from gcc_job_radar.models import JobPosting
-from gcc_job_radar.presentation import build_ranked_presentation, format_jobs_html
+from gcc_job_radar.presentation import (
+    build_ranked_presentation,
+    format_job_card_html,
+    format_jobs_html,
+    split_telegram_message,
+)
 from gcc_job_radar.relevance import score_job_posting
 from gcc_job_radar.resume_tailor_bridge import tailor_resume_for_job
 
@@ -145,55 +150,6 @@ def build_job_inline_keyboard(
     }
 
 
-def format_job_card_html(job: JobPosting | dict[str, Any]) -> str:
-    """Format an individual job posting card for Telegram alert."""
-    if isinstance(job, JobPosting):
-        company = job.company
-        pos_title = job.title
-        location = job.location
-        ats = job.provider.value.upper()
-        date = job.published_date or "Active"
-    else:
-        company = job.get("company", "Unknown")
-        pos_title = job.get("title", "Role")
-        location = job.get("location", "India")
-        prov = job.get("provider", "")
-        ats = getattr(prov, "value", str(prov)).upper()
-        date = job.get("published_date") or "Active"
-
-    effective_url, _, label = resolve_effective_apply_url(job)
-    start_date = getattr(job, "application_start_date", None) if isinstance(job, JobPosting) else job.get("application_start_date")
-    end_date = getattr(job, "application_end_date", None) if isinstance(job, JobPosting) else job.get("application_end_date")
-
-    date_parts: list[str] = []
-    if start_date and str(start_date).strip() not in ("Recent", "Active", "None", ""):
-        date_parts.append(f"📅 Posted: {html.escape(str(start_date))}")
-    elif not end_date:
-        date_parts.append(f"📅 {html.escape(str(date or 'Active'))}")
-    if end_date and str(end_date).strip():
-        date_parts.append(f"⏳ Closes: {html.escape(str(end_date))}")
-    date_line = " • ".join(date_parts) if date_parts else f"📅 {html.escape(str(date or 'Active'))}"
-
-    card = (
-        f"🚀 <b>{html.escape(company)}</b>\n"
-        f"💼 {html.escape(pos_title)}\n"
-        f"📍 {html.escape(location)} ({ats}) • {date_line}\n"
-        f"🔗 <a href=\"{html.escape(str(effective_url))}\">{html.escape(label)}</a>"
-    )
-    tex_path = getattr(job, "tailored_tex_path", None) if isinstance(job, JobPosting) else (job.get("tailored_tex_path") if isinstance(job, dict) else None)
-    pdf_path = getattr(job, "tailored_pdf_path", None) if isinstance(job, JobPosting) else (job.get("tailored_pdf_path") if isinstance(job, dict) else None)
-    why_text = getattr(job, "why", None) if isinstance(job, JobPosting) else (job.get("why") if isinstance(job, dict) else None)
-    if not why_text:
-        score_job_posting(job)
-        why_text = getattr(job, "why", None) if isinstance(job, JobPosting) else (job.get("why") if isinstance(job, dict) else None)
-    if why_text:
-        card += f"\n💡 <i>{html.escape(str(why_text))}</i>"
-    if tex_path:
-        pdf_note = f" (PDF: <code>{html.escape(str(pdf_path))}</code>)" if pdf_path else ""
-        card += f"\n📄 <b>Tailored Resume:</b> <code>{html.escape(str(tex_path))}</code>{pdf_note}"
-    return card
-
-
 async def send_telegram_job_card(
     bot_token: str,
     chat_id: str | int,
@@ -250,20 +206,7 @@ async def send_telegram_notification(
     )
 
     # Telegram messages are limited to 4096 characters, chunk if needed
-    message_chunks = []
-    if len(full_text) <= 3800:
-        message_chunks.append(full_text)
-    else:
-        current_chunk = ""
-        for block in full_text.split("\n\n"):
-            if len(current_chunk) + len(block) + 2 > 3800:
-                if current_chunk:
-                    message_chunks.append(current_chunk.strip())
-                current_chunk = block + "\n\n"
-            else:
-                current_chunk += block + "\n\n"
-        if current_chunk.strip():
-            message_chunks.append(current_chunk.strip())
+    message_chunks = split_telegram_message(full_text, max_length=3800)
 
     # Build interactive inline keyboard for displayed jobs
     displayed_jobs = [j for tier in presentation.tiers for j in tier.jobs]

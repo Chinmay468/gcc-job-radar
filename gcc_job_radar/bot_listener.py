@@ -28,7 +28,7 @@ if sys.stderr is not None and hasattr(sys.stderr, "reconfigure"):
 load_dotenv()
 from rich.panel import Panel
 
-from gcc_job_radar.ai_agent import ask_ai_agent, clear_chat_history, sanitize_telegram_html
+from gcc_job_radar.ai_agent import ask_ai_agent, clear_chat_history
 from gcc_job_radar.config import COMPANIES
 from gcc_job_radar.db import (
     filter_new_jobs,
@@ -48,7 +48,12 @@ from gcc_job_radar.scanner import scan_all_companies
 from gcc_job_radar.link_resolver import resolve_effective_apply_url
 from gcc_job_radar.models import JobPosting, ATSProvider
 from gcc_job_radar.notifier import build_job_inline_keyboard
-from gcc_job_radar.presentation import build_ranked_presentation, format_jobs_html
+from gcc_job_radar.presentation import (
+    build_ranked_presentation,
+    format_jobs_html,
+    sanitize_telegram_html,
+    split_telegram_message,
+)
 from gcc_job_radar.resume_tailor_bridge import tailor_resume_for_job
 from gcc_job_radar.apply_prep import prep_job_application
 from gcc_job_radar.display import console
@@ -58,11 +63,14 @@ logger = logging.getLogger(__name__)
 # Debounce & lock flags to prevent duplicate simultaneous or re-delivered /scan executions
 _is_scanning: bool = False
 _last_scan_timestamp: float = 0.0
+_last_scan_scope: str = ""
+_last_scan_label: str = ""
 
 DEFAULT_MENU_COMMANDS: list[dict[str, str]] = [
     {"command": "scan", "description": "Scan GCCs (/scan, /scan new, /scan <co>)"},
     {"command": "latest", "description": "View 5 latest verified openings"},
     {"command": "email", "description": "Sync 3 email accounts for job alerts"},
+    {"command": "accio", "description": "Scan AccioJob portal & hiring drives"},
     {"command": "tailor", "description": "Generate tailored PDF resume for job"},
     {"command": "applied", "description": "View your active applied roles"},
     {"command": "followups", "description": "View stale applications needing follow-up"},
@@ -92,53 +100,6 @@ async def sync_telegram_bot_commands(
         logger.warning("Error syncing Telegram bot commands: %s", exc)
         return False
 
-
-
-def split_telegram_message(text: str, max_length: int = 3950) -> list[str]:
-    """Split a long message into safe chunks <= max_length (Telegram's hard limit is 4096).
-
-    Prefers splitting on paragraph breaks (\n\n), then line breaks (\n), then hard slices.
-    """
-    if not text:
-        return [""]
-    if len(text) <= max_length:
-        return [text]
-
-    chunks: list[str] = []
-    paragraphs = text.split("\n\n")
-    current_chunk = ""
-
-    for para in paragraphs:
-        if len(current_chunk) + (2 if current_chunk else 0) + len(para) <= max_length:
-            current_chunk = f"{current_chunk}\n\n{para}" if current_chunk else para
-        else:
-            if current_chunk:
-                chunks.append(current_chunk)
-                current_chunk = ""
-
-            if len(para) > max_length:
-                lines = para.split("\n")
-                line_chunk = ""
-                for line in lines:
-                    if len(line_chunk) + (1 if line_chunk else 0) + len(line) <= max_length:
-                        line_chunk = f"{line_chunk}\n{line}" if line_chunk else line
-                    else:
-                        if line_chunk:
-                            chunks.append(line_chunk)
-                            line_chunk = ""
-                        while len(line) > max_length:
-                            chunks.append(line[:max_length])
-                            line = line[max_length:]
-                        line_chunk = line
-                if line_chunk:
-                    current_chunk = line_chunk
-            else:
-                current_chunk = para
-
-    if current_chunk:
-        chunks.append(current_chunk)
-
-    return chunks
 
 
 async def send_telegram_chat_action(
@@ -296,7 +257,8 @@ async def handle_command(
             "⚡ <b>Core Actions (In [/] Menu):</b>\n"
             "• <code>/scan</code> — Scan active GCCs for entry-level roles (or <code>/scan all</code>)\n"
             "• <code>/latest</code> — View 5 latest verified openings with quick buttons\n"
-            "• <code>/email</code> — Sync 3 email accounts for job alerts\n"
+            "• <code>/email</code> — Sync 3 email accounts for job alerts (LinkedIn, Naukri, AccioJob)\n"
+            "• <code>/acciojob</code> — Scan AccioJob portal &amp; hiring drives (or <code>/accio</code>)\n"
             "• <code>/tailor &lt;id/company&gt;</code> — Generate tailored LaTeX &amp; PDF resume\n"
             "• <code>/applied</code> — View your active applied roles\n"
             "• <code>/followups</code> — View stale applications needing follow-up (7d+)\n"
@@ -352,18 +314,29 @@ async def handle_command(
 
     elif cmd == "/latest":
         prune_expired_jobs(db_path=db_path)
-        recent_jobs = get_latest_jobs(limit=5, status="NEW", db_path=db_path)
+        show_all_latest = (arg.lower() == "all")
+        if show_all_latest:
+            limit = 100
+            title = "All Latest Discovered Openings"
+        elif arg.isdigit():
+            limit = max(1, min(100, int(arg)))
+            title = f"Latest Discovered Openings ({limit})"
+        else:
+            limit = 5
+            title = "Latest Discovered Openings"
+
+        recent_jobs = get_latest_jobs(limit=limit, status="NEW", db_path=db_path)
         if not recent_jobs:
-            reply = format_jobs_html([], "Latest Discovered Openings")
+            reply = format_jobs_html([], title)
             await send_telegram_reply(bot_token, chat_id, reply, client)
         elif len(recent_jobs) == 1:
-            reply = format_jobs_html(recent_jobs, "Latest Discovered Openings")
+            reply = format_jobs_html(recent_jobs, title)
             markup = build_job_inline_keyboard(recent_jobs[0])
             await send_telegram_reply(bot_token, chat_id, reply, client, reply_markup=markup)
         else:
-            reply = format_jobs_html(recent_jobs, "Latest Discovered Openings")
+            reply = format_jobs_html(recent_jobs, title, max_full_cards=5)
             keyboard = []
-            for idx, rj in enumerate(recent_jobs, start=1):
+            for idx, rj in enumerate(recent_jobs[:5], start=1):
                 jid = rj.get("numeric_id") or rj.get("id")
                 eff_url, _, _ = resolve_effective_apply_url(rj)
                 comp = (rj.get("company") or "")[:12]
@@ -453,7 +426,7 @@ async def handle_command(
         await send_telegram_reply(bot_token, chat_id, reply, client)
 
     elif cmd == "/scan":
-        global _is_scanning, _last_scan_timestamp
+        global _is_scanning, _last_scan_timestamp, _last_scan_scope, _last_scan_label
         import time
 
         now = time.time()
@@ -466,17 +439,21 @@ async def handle_command(
             )
             return
 
-        # Debounce: if a scan finished less than 10 seconds ago (e.g. duplicate webhook/update)
-        if now - _last_scan_timestamp < 10:
+        arg_clean = arg.strip().lower()
+
+        # Debounce: if the exact same scan or a full scan was completed less than 10 seconds ago
+        is_same_scope = (arg_clean == _last_scan_scope)
+        is_recent_full_scan = (_last_scan_scope in ("", "all", "--all", "-a"))
+        if (now - _last_scan_timestamp < 10) and (is_same_scope or is_recent_full_scan):
+            prior_name = _last_scan_label or "companies"
             await send_telegram_reply(
                 bot_token,
                 chat_id,
-                "⚡ <i>A scan was just completed seconds ago. Use <code>/latest</code> to see current findings or try again in a few moments.</i>",
+                f"⚡ <i>A scan for {prior_name} was just completed seconds ago. Please wait a few moments before scanning again.</i>",
                 client,
             )
             return
 
-        arg_clean = arg.strip().lower()
         show_all = arg_clean in ("all", "--all", "-a")
         target_companies = COMPANIES
         scan_title_label = f"all <b>{len(COMPANIES)}</b> foreign GCCs & tech centers in India"
@@ -567,6 +544,8 @@ async def handle_command(
         finally:
             _is_scanning = False
             _last_scan_timestamp = time.time()
+            _last_scan_scope = arg_clean
+            _last_scan_label = scan_title_label
 
     elif cmd in ("/clear", "/reset"):
         clear_chat_history(chat_id)
@@ -911,9 +890,9 @@ async def handle_command(
 
         acc_count = len(accounts)
         scan_msg = (
-            f"📬 <i>Scanning your 3 configured email accounts for job alerts (LinkedIn, Naukri, Indeed, Glassdoor)...</i>"
+            f"📬 <i>Scanning your 3 configured email accounts for job alerts (LinkedIn, Naukri, Indeed, Glassdoor, AccioJob)...</i>"
             if acc_count == 3
-            else f"📬 <i>Scanning your {acc_count} configured email account{'s' if acc_count > 1 else ''} for job alerts (LinkedIn, Naukri, Indeed, Glassdoor)...</i>"
+            else f"📬 <i>Scanning your {acc_count} configured email account{'s' if acc_count > 1 else ''} for job alerts (LinkedIn, Naukri, Indeed, Glassdoor, AccioJob)...</i>"
         )
         await send_telegram_reply(bot_token, chat_id, scan_msg, client)
 
@@ -940,6 +919,54 @@ async def handle_command(
             clean_err = re.sub(r"\[/?(bold|dim|cyan|red)[^\]]*\]", "", str(exc))
             reply = f"❌ Error checking email accounts: {html.escape(clean_err)}"
         await send_telegram_reply(bot_token, chat_id, reply, client)
+
+    elif cmd in ("/accio", "/acciojob"):
+        await send_telegram_chat_action(bot_token, chat_id, client, "typing")
+        if arg:
+            await send_telegram_reply(
+                bot_token,
+                chat_id,
+                "⚡ <i>Parsing AccioJob digest text and registering verified hiring companies...</i>",
+                client,
+            )
+            try:
+                from tools.ingest_acciojob import run_acciojob_pipeline
+                new_jobs = await run_acciojob_pipeline(raw_text=arg, scrape=False, db_path=db_path)
+                if new_jobs:
+                    reply = format_jobs_html(new_jobs, f"AccioJob Digest Roles ({len(new_jobs)})")
+                else:
+                    reply = (
+                        "ℹ️ <b>AccioJob Ingestion Complete</b>\n\n"
+                        "No new unrecorded tech roles matching your profile (Java/Spring, React, Node, SQL, 0-2 YOE) found in the text."
+                    )
+            except Exception as exc:
+                logger.exception("Error ingesting AccioJob text")
+                clean_err = re.sub(r"\[/?(bold|dim|cyan|red)[^\]]*\]", "", str(exc))
+                reply = f"❌ Error processing AccioJob digest: {html.escape(clean_err)}"
+            await send_telegram_reply(bot_token, chat_id, reply, client)
+        else:
+            await send_telegram_reply(
+                bot_token,
+                chat_id,
+                "🌐 <i>Scanning AccioJob career portal &amp; fresh opportunities...</i>",
+                client,
+            )
+            try:
+                from tools.ingest_acciojob import run_acciojob_pipeline
+                jobs = await run_acciojob_pipeline(scrape=True, db_path=db_path)
+                if jobs:
+                    reply = format_jobs_html(jobs, f"AccioJob Verified Roles ({len(jobs)})")
+                else:
+                    reply = (
+                        "ℹ️ <b>AccioJob Scan Complete</b>\n\n"
+                        "No new unrecorded entry-level tech opportunities found on the AccioJob portal right now.\n"
+                        "<i>Tip: You can also paste an AccioJob digest table using <code>/acciojob &lt;paste text&gt;</code>!</i>"
+                    )
+            except Exception as exc:
+                logger.exception("Error scanning AccioJob portal")
+                clean_err = re.sub(r"\[/?(bold|dim|cyan|red)[^\]]*\]", "", str(exc))
+                reply = f"❌ Error scanning AccioJob portal: {html.escape(clean_err)}"
+            await send_telegram_reply(bot_token, chat_id, reply, client)
 
     elif cmd in ("/sync", "/dbsync"):
         from gcc_job_radar.turso_sync import is_turso_configured, sync_turso

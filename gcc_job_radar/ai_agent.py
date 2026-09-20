@@ -34,7 +34,15 @@ from gcc_job_radar.db import (
     record_manual_job,
 )
 from gcc_job_radar.link_resolver import resolve_effective_apply_url
-from gcc_job_radar.presentation import build_ranked_presentation, format_jobs_html
+from gcc_job_radar.presentation import (
+    TelegramHTMLSanitizer,
+    build_ranked_presentation,
+    convert_markdown_tables_to_cards,
+    format_jobs_html,
+    markdown_to_telegram_html,
+    sanitize_telegram_html,
+    split_telegram_message,
+)
 from gcc_job_radar.scanner import scan_all_companies
 
 logger = logging.getLogger(__name__)
@@ -58,13 +66,14 @@ SYSTEM_PROMPT = (
     "- The user has 3 active email accounts configured in .env with authorized IMAP SSL credentials (chinmay8064@gmail.com, chinmaymaheshwari.it27@gmail.com, chinmaymaheshwari.it27@jecrc.ac.in).\n"
     "- When the user asks to check, scan, go through, or sync their email accounts / inbox for jobs, job alerts, or emails (e.g. 'Go through all 3 email accounts for new relevant jobs', 'check my emails for jobs', 'scan inbox for job alerts', 'sync emails'), ALWAYS invoke the `sync_email_jobs` tool immediately.\n"
     "- NEVER say 'I am not able to access your email accounts directly' or 'I don't have access to your email'. You DO have direct access via `sync_email_jobs`.\n\n"
-    "- ONLY invoke tools (`check_company_live`, `query_jobs`, `sync_email_jobs`, `get_applied_jobs`, `get_dismissed_jobs`, `manage_job_status`) when searching for job openings or checking company/email status. NEVER invoke them for compensation, CTC, salary inquiries, interview advice, resume tips, or general role comparisons. ATS endpoints do NOT contain Indian CTC/compensation figures.\n"
+    "- ONLY invoke tools (`check_company_live`, `query_jobs`, `sync_email_jobs`, `scan_acciojob_portal`, `get_applied_jobs`, `get_dismissed_jobs`, `manage_job_status`) when searching for job openings or checking company/email status. NEVER invoke them for compensation, CTC, salary inquiries, interview advice, resume tips, or general role comparisons. ATS endpoints do NOT contain Indian CTC/compensation figures.\n"
     "- Invoke `query_jobs` when the user is searching for open job listings in the database by title, keyword, city, or company name (e.g. 'BlackRock', 'Flipkart', 'find python roles in Bangalore'). If `query_jobs` returns 0 jobs for a requested company or if the user asks to scan, check, or refresh active openings at a specific company (e.g. 'check Databricks live', 'scan Celonis', 'add/check BlackRock', 'check Flipkart'), invoke `check_company_live` to fetch live openings directly from the company's verified ATS board.\n"
     "- Use `get_applied_jobs` whenever the user asks for their applied jobs, application history, applied sheet, applied list, or asks 'where are the rest of my applications'. ALWAYS invoke `get_applied_jobs` to retrieve the authentic list of applied jobs from the database instead of guessing from recent chat context.\n"
     "- Use `get_dismissed_jobs` whenever the user asks for dismissed jobs, dismissed companies, hidden jobs, 'name of all', 'names of all companies', 'list all dismissed', or asks which companies/roles have been dismissed. ALWAYS invoke `get_dismissed_jobs` to retrieve the comprehensive list of ALL dismissed companies and total count from the database instead of guessing or listing only 4-5 from recent chat context.\n"
     "- Use `manage_job_status` when the user asks to dismiss, hide, apply, mark as applied, or restore/undismiss jobs by ID number (e.g. 'dismiss job 1 and 4') or company name (e.g. 'dismiss Devmani Traders', 'mark BT Group as applied', 'restore job 2', 'applied to uipath, celonis', 'dismiss wysa, katalystcs, tvaram, WSP, betterworks'). Dismissing companies by name permanently suppresses them from future scans, email alerts, and daily digests, even if they have no currently active listings in the local database.\n"
     "- Use `tailor_job_resume` when the user asks to tailor, customize, adapt, or generate a resume/CV for a specific job (e.g. 'tailor my resume for Flipkart', 'generate a resume for job 1', 'tailor resume for Amazon SDE-1').\n"
-    "- Use `sync_email_jobs` whenever the user asks to scan, check, go through, or ingest job alert emails from their configured email accounts.\n"
+    "- Use `sync_email_jobs` whenever the user asks to scan, check, go through, or ingest job alert emails (including LinkedIn, Naukri, Indeed, Glassdoor, and AccioJob emails) from their configured email accounts.\n"
+    "- Use `scan_acciojob_portal` whenever the user asks to check, scan, or fetch fresh early-career tech jobs and hiring drives from the AccioJob portal.\n"
     "- FILTERING APPLIED AND DISMISSED COMPANIES: By default, NEVER show or suggest roles or company names that the user has already marked as APPLIED or DISMISSED, unless the user specifically asks for 'all' (e.g. 'show all', 'all companies', 'include dismissed'). `query_jobs` and `get_configured_companies` accept `include_all`: only set `include_all=True` when specifically asked for all companies/jobs.\n\n"
     "DOMAIN KNOWLEDGE FOR COMPENSATION & CTC QUERIES IN INDIA:\n"
     "- When asked about compensation, CTC, or salary thresholds (e.g. 'which role offers CTC over 12 lakhs?'):\n"
@@ -316,7 +325,7 @@ GEMINI_TOOLS = [
             },
             {
                 "name": "sync_email_jobs",
-                "description": "Scan and ingest job alert emails directly from the user's 3 configured email accounts (e.g. LinkedIn, Naukri, Indeed, Glassdoor alerts via IMAP SSL). Extracts verified entry-level tech openings, saves them to the database, and returns the findings. ALWAYS use when user asks to check, scan, or go through their emails or inboxes for jobs.",
+                "description": "Scan and ingest job alert emails directly from the user's 3 configured email accounts (e.g. LinkedIn, Naukri, Indeed, Glassdoor, AccioJob alerts via IMAP SSL). Extracts verified entry-level tech openings, saves them to the database, and returns the findings. ALWAYS use when user asks to check, scan, or go through their emails or inboxes for jobs.",
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {
@@ -324,6 +333,14 @@ GEMINI_TOOLS = [
                         "limit": {"type": "INTEGER", "description": "Maximum emails to inspect per mailbox (default 15)."},
                         "unread_only": {"type": "BOOLEAN", "description": "Set to true to check only unread emails, or false to inspect all recent alert emails while deduplicating against database. Defaults to false."},
                     },
+                },
+            },
+            {
+                "name": "scan_acciojob_portal",
+                "description": "Scan the AccioJob career portal and hiring partner drives for verified entry-level tech roles in India matching the candidate's stack (Java/Spring Boot, React/MERN, SQL, 0-2 YOE). Saves matching jobs to database and returns them.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {},
                 },
             },
             {
@@ -457,7 +474,7 @@ OPENAI_TOOLS = [
         "type": "function",
         "function": {
             "name": "sync_email_jobs",
-            "description": "Scan and ingest job alert emails directly from the user's 3 configured email accounts (e.g. LinkedIn, Naukri, Indeed, Glassdoor alerts via IMAP SSL). Extracts verified entry-level tech openings, saves them to the database, and returns the findings. ALWAYS use when user asks to check, scan, or go through their emails or inboxes for jobs.",
+            "description": "Scan and ingest job alert emails directly from the user's 3 configured email accounts (e.g. LinkedIn, Naukri, Indeed, Glassdoor, AccioJob alerts via IMAP SSL). Extracts verified entry-level tech openings, saves them to the database, and returns the findings. ALWAYS use when user asks to check, scan, or go through their emails or inboxes for jobs.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -465,6 +482,17 @@ OPENAI_TOOLS = [
                     "limit": {"type": "integer", "description": "Maximum emails to inspect per mailbox (default 15)."},
                     "unread_only": {"type": "boolean", "description": "Set to true to check only unread emails, or false to inspect all recent alert emails while deduplicating against database. Defaults to false."},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scan_acciojob_portal",
+            "description": "Scan the AccioJob career portal and hiring partner drives for verified entry-level tech roles in India matching the candidate's stack (Java/Spring Boot, React/MERN, SQL, 0-2 YOE). Saves matching jobs to database and returns them.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
             },
         },
     },
@@ -970,6 +998,30 @@ async def execute_tool(
             "note": f"Scanned {len(accounts)} configured email account(s) and found {len(jobs)} relevant opening(s). Present newly found jobs clearly using structured job cards.",
         }
 
+    elif name == "scan_acciojob_portal":
+        from tools.ingest_acciojob import run_acciojob_pipeline
+
+        jobs = await run_acciojob_pipeline(scrape=True, db_path=db_path)
+        compact_jobs = []
+        for j in jobs[:20]:
+            eff_url, _, label = resolve_effective_apply_url(j)
+            compact_jobs.append({
+                "id": getattr(j, "numeric_id", None) or getattr(j, "id", None),
+                "company": j.company,
+                "title": j.title,
+                "location": j.location,
+                "apply_url": eff_url or str(j.apply_url),
+                "published_date": str(j.published_date or "Recent")[:10],
+            })
+
+        return {
+            "status": "success",
+            "count": len(compact_jobs),
+            "total_found": len(jobs),
+            "jobs": compact_jobs,
+            "note": f"Scanned AccioJob portal and found {len(jobs)} verified opening(s).",
+        }
+
     elif name in ("tailor_job_resume", "tailor_resume"):
         job_id = args.get("job_id")
         company = args.get("company")
@@ -1028,197 +1080,6 @@ async def execute_tool(
         }
 
     return {"status": "error", "message": f"Unknown tool '{name}'"}
-
-
-# Telegram HTML Formatting Helper
-
-
-def _clean_cell(val: str) -> str:
-    val = val.strip()
-    if (val.startswith("**") and val.endswith("**")) or (val.startswith("__") and val.endswith("__")):
-        val = val[2:-2].strip()
-    return val
-
-
-def _split_table_row(line: str) -> list[str]:
-    stripped = line.strip()
-    if stripped.startswith("|"):
-        stripped = stripped[1:]
-    if stripped.endswith("|"):
-        stripped = stripped[:-1]
-    return [cell.strip() for cell in stripped.split("|")]
-
-
-def _is_table_separator(line: str) -> bool:
-    stripped = line.strip()
-    return bool(re.match(r"^\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)+\|?$", stripped))
-
-
-def convert_markdown_tables_to_cards(text: str) -> str:
-    """Convert raw markdown tables into mobile-friendly structured cards."""
-    lines = text.split("\n")
-    new_lines = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        if "|" in line and i + 1 < len(lines) and _is_table_separator(lines[i + 1]):
-            headers = [_clean_cell(c) for c in _split_table_row(line)]
-            i += 2  # skip header and separator line
-            table_cards = []
-            while i < len(lines) and "|" in lines[i] and not _is_table_separator(lines[i]):
-                row_cells = _split_table_row(lines[i])
-                row_dict = {h.lower(): cell for h, cell in zip(headers, row_cells)}
-
-                comp = next((_clean_cell(v) for k, v in row_dict.items() if any(w in k for w in ["company", "employer", "org", "firm"]) and v), None)
-                role = next((_clean_cell(v) for k, v in row_dict.items() if any(w in k for w in ["role", "title", "position", "job", "designation"]) and v), None)
-                loc = next((_clean_cell(v) for k, v in row_dict.items() if any(w in k for w in ["location", "city", "place", "office"]) and v), None)
-                date = next((_clean_cell(v) for k, v in row_dict.items() if any(w in k for w in ["posted", "date", "published", "added"]) and v), None)
-                link = next((v for k, v in row_dict.items() if any(w in k for w in ["link", "apply", "url", "action"]) and v), None)
-
-                if comp or role:
-                    card = []
-                    if comp:
-                        card.append(f"🏢 **{comp}**")
-                    if role:
-                        card.append(f"💼 {role}")
-                    meta = []
-                    if loc:
-                        meta.append(f"📍 {loc}")
-                    if date:
-                        meta.append(f"📅 {date}")
-                    if meta:
-                        card.append(" • ".join(meta))
-                    if link:
-                        if link.startswith("[") and "](" in link:
-                            card.append(f"🔗 {link}")
-                        elif link.startswith("http://") or link.startswith("https://"):
-                            card.append(f"🔗 [Apply on ATS]({link})")
-                        else:
-                            card.append(f"🔗 {link}")
-                    table_cards.append("\n".join(card))
-                else:
-                    items = [f"• **{h.title()}**: {v}" for h, v in zip(headers, row_cells) if v]
-                    table_cards.append("\n".join(items))
-                i += 1
-            if table_cards:
-                new_lines.append("\n\n".join(table_cards))
-            continue
-        new_lines.append(line)
-        i += 1
-    return "\n".join(new_lines)
-
-
-class TelegramHTMLSanitizer(HTMLParser):
-    """Enforces strictly balanced, properly nested HTML tags for Telegram Bot API."""
-
-    ALLOWED_TAGS = {"b", "strong", "i", "em", "u", "ins", "s", "strike", "del", "code", "pre", "a", "blockquote"}
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.stack: list[str] = []
-        self.out: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
-        tag = tag.lower()
-        if tag not in self.ALLOWED_TAGS:
-            return
-        attr_str = ""
-        if tag == "a":
-            href = dict(attrs).get("href", "")
-            if href:
-                attr_str = f' href="{html.escape(href, quote=True)}"'
-            else:
-                return
-        self.stack.append(tag)
-        self.out.append(f"<{tag}{attr_str}>")
-
-    def handle_endtag(self, tag: str) -> None:
-        tag = tag.lower()
-        if tag not in self.ALLOWED_TAGS or tag not in self.stack:
-            return
-        # Pop down to tag, closing in proper reverse order so tags are NEVER uncrossed or overlapping
-        while self.stack:
-            top = self.stack.pop()
-            self.out.append(f"</{top}>")
-            if top == tag:
-                break
-
-    def handle_data(self, data: str) -> None:
-        self.out.append(html.escape(data, quote=False))
-
-    def get_clean_html(self) -> str:
-        # Close any lingering tags at end of message
-        while self.stack:
-            top = self.stack.pop()
-            self.out.append(f"</{top}>")
-        return "".join(self.out)
-
-
-def sanitize_telegram_html(text: str) -> str:
-    """Strictly balance and validate HTML tags for Telegram Bot API."""
-    if not text:
-        return ""
-    try:
-        parser = TelegramHTMLSanitizer()
-        parser.feed(text)
-        return parser.get_clean_html().strip()
-    except Exception:
-        return re.sub(r"<[^>]+>", "", text).strip()
-
-
-def markdown_to_telegram_html(text: str) -> str:
-    """Convert common markdown patterns to safe Telegram HTML."""
-    if not text:
-        return ""
-
-    # 1. Convert any raw markdown tables to clean card layout
-    text = convert_markdown_tables_to_cards(text)
-
-    # 2. Convert markdown task list checkboxes to visual checkboxes for Telegram
-    # Note: Telegram Bot API uses HTML parse mode in this repository.
-    # Telegram HTML has no native checkbox element; Unicode ballot box characters (☐ / ☑)
-    # render reliably across iOS, Android, and Desktop clients without triggering
-    # MarkdownV2 escaping errors or breaking HTML entity sanitization.
-    text = re.sub(r"(?m)^[\*\-]\s+\[\s*\]\s+", "☐ ", text)
-    text = re.sub(r"(?m)^[\*\-]\s+\[[xX]\]\s+", "☑ ", text)
-
-    # 3. Convert remaining markdown bullet points (* or - at start of line) to •
-    text = re.sub(r"(?m)^[\*\-]\s+", "• ", text)
-
-    # Replace markdown code blocks ```code``` -> <pre>code</pre>
-    def replace_code_block(match: re.Match) -> str:
-        content = match.group(1)
-        return f"<pre>{html.escape(content.strip())}</pre>"
-
-    text = re.sub(r"```(?:[a-zA-Z0-9_-]+)?\n?(.*?)```", replace_code_block, text, flags=re.DOTALL)
-
-    # Escape HTML special chars in text outside already replaced <pre>
-    parts = re.split(r"(<pre>.*?</pre>)", text, flags=re.DOTALL)
-    escaped_parts = []
-    for part in parts:
-        if part.startswith("<pre>"):
-            escaped_parts.append(part)
-        else:
-            # Escape raw & < >
-            part = html.escape(part)
-            # Convert markdown headers (### Header) to bold <b>Header</b>
-            part = re.sub(r"(?m)^#{1,6}\s+\**([^\*\n]+?)\**\s*$", r"<b>\1</b>", part)
-            # Restore markdown links [title](url) -> <a href="url">title</a>
-            part = re.sub(r"\[([^\]]+)\]\((https?://[^\)]+)\)", r'<a href="\2">\1</a>', part)
-            # Bold **text** or __text__ -> <b>text</b>
-            part = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", part)
-            part = re.sub(r"__(.+?)__", r"<b>\1</b>", part)
-
-            # Inline code `code` -> <code>code</code>
-            part = re.sub(r"`([^`]+)`", r"<code>\1</code>", part)
-            # Italics *text* or _text_ -> <i>text</i> (excluding word boundaries or whitespace)
-            part = re.sub(r"(?<![\*\w])\*([^\*\s](?:[^\*]*?[^\*\s])?)\*(?![\*\w])", r"<i>\1</i>", part)
-            part = re.sub(r"(?<![_\w])_([^_\s](?:[^_]*?[^_\s])?)_(?![_\w])", r"<i>\1</i>", part)
-            escaped_parts.append(part)
-
-    raw_html = "".join(escaped_parts).strip()
-    return sanitize_telegram_html(raw_html)
-
 
 
 
@@ -1314,6 +1175,15 @@ def format_tool_result_summary(name: str, result: dict[str, Any]) -> str:
                 f"No new unrecorded entry-level tech job alerts found in the specified window."
             )
         return format_jobs_html(jobs, f"New Openings from Email Alerts ({len(jobs)})")
+
+    if name == "scan_acciojob_portal":
+        jobs = result.get("jobs", [])
+        if not jobs:
+            return (
+                "ℹ️ <b>AccioJob Scan Complete</b>\n\n"
+                "No new unrecorded entry-level tech opportunities found on the AccioJob portal right now."
+            )
+        return format_jobs_html(jobs, f"AccioJob Verified Openings ({len(jobs)})")
 
     if name in ("tailor_job_resume", "tailor_resume"):
         if result.get("status") == "success":

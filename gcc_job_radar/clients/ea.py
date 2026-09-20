@@ -7,10 +7,6 @@ import httpx
 from pydantic import ValidationError
 
 from gcc_job_radar.clients.base import BaseATSClient
-from gcc_job_radar.filters import (
-    matches_india_location,
-    matches_target_title,
-)
 from gcc_job_radar.models import ATSProvider, CompanyConfig, JobPosting
 
 logger = logging.getLogger(__name__)
@@ -121,10 +117,7 @@ class EAClient(BaseATSClient):
                     )
 
                     # Filters
-                    if not matches_target_title(raw_title):
-                        continue
-
-                    if not matches_india_location(location):
+                    if not self.is_target_role(raw_title, location, check_tech=False):
                         continue
 
                     try:
