@@ -1360,6 +1360,204 @@ async def handle_callback_query(
     return False
 
 
+async def _keep_typing_action(
+    bot_token: str,
+    chat_id: str | int,
+    client: httpx.AsyncClient,
+    stop_event: asyncio.Event,
+    interval: float = 4.5,
+) -> None:
+    """Continuously send typing chat action to Telegram until stop_event is set."""
+    while not stop_event.is_set():
+        await send_telegram_chat_action(bot_token, chat_id, client, "typing")
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+        except asyncio.TimeoutError:
+            pass
+
+
+async def dispatch_single_update(
+    update: dict[str, Any],
+    bot_token: str,
+    allowed_chat_id: str,
+    client: httpx.AsyncClient,
+    db_path: Optional[Path] = None,
+) -> None:
+    """Process a single incoming Telegram update asynchronously without blocking the polling loop."""
+    try:
+        # Check for callback queries (interactive inline keyboard actions)
+        if "callback_query" in update:
+            cb_query = update["callback_query"]
+            logger.info(
+                "Received callback: %s from user %s",
+                cb_query.get("data"),
+                cb_query.get("from", {}).get("id"),
+            )
+            try:
+                console.print(
+                    f"[magenta]Received callback:[/magenta] [bold]{cb_query.get('data')}[/bold] "
+                    f"from user [yellow]{cb_query.get('from', {}).get('id')}[/yellow]"
+                )
+            except Exception:
+                pass
+            await handle_callback_query(
+                callback_query=cb_query,
+                bot_token=bot_token,
+                allowed_chat_id=allowed_chat_id,
+                client=client,
+                db_path=db_path,
+            )
+            return
+
+        message = update.get("message") or update.get("edited_message")
+        if not message:
+            return
+
+        chat = message.get("chat", {})
+        chat_id = chat.get("id")
+        text = message.get("text") or ""
+
+        if text.startswith("/"):
+            logger.info("Received command: %s from chat_id %s", text, chat_id)
+            try:
+                console.print(f"[cyan]Received command:[/cyan] [bold]{text}[/bold] from chat_id [yellow]{chat_id}[/yellow]")
+            except Exception:
+                pass
+            await handle_command(
+                command_text=text,
+                chat_id=chat_id,
+                bot_token=bot_token,
+                allowed_chat_id=allowed_chat_id,
+                client=client,
+                db_path=db_path,
+            )
+            return
+        elif text.strip():
+            if str(chat_id).strip() != str(allowed_chat_id).strip():
+                logger.warning("Unauthorized access attempt from chat_id: %s", chat_id)
+                await send_telegram_reply(
+                    bot_token,
+                    chat_id,
+                    "⛔ <b>Access Denied</b>: Your Telegram account is not authorized to control this GCC Job Radar bot.",
+                    client,
+                )
+                return
+
+            raw_msg = text.strip()
+            raw_lower = raw_msg.lower()
+
+            # Fast-path 1: Natural language scan new
+            m_scan_new = re.match(
+                r"^(?:run\s+)?scan\s+(?:the\s+)?(?:new|newly\s+added|recent)(?:\s+companies)?(?:\s+(\d+))?$",
+                raw_lower,
+            )
+            if m_scan_new:
+                count_val = m_scan_new.group(1)
+                cmd_str = f"/scan new {count_val}".strip() if count_val else "/scan new"
+                await handle_command(
+                    command_text=cmd_str,
+                    chat_id=chat_id,
+                    bot_token=bot_token,
+                    allowed_chat_id=allowed_chat_id,
+                    client=client,
+                    db_path=db_path,
+                )
+                return
+
+            # Fast-path 2: Natural language applied list / applications view
+            if re.match(r"^(?:show\s+|view\s+|get\s+|my\s+)?(?:applied|applies|applications?)(?:\s+(?:list|jobs|roles|history))?$", raw_lower):
+                await handle_command(
+                    command_text="/applied",
+                    chat_id=chat_id,
+                    bot_token=bot_token,
+                    allowed_chat_id=allowed_chat_id,
+                    client=client,
+                    db_path=db_path,
+                )
+                return
+
+            # Fast-path 3: Natural language apply
+            is_nl_apply = (
+                re.search(r"\b(?:applied|aoplies|applies)(?:\s+opening)?(?:\s+so\s+mark\s+.*)?$", raw_lower)
+                or re.match(r"^(?:i\s+mean\s+)?(?:i\s+)?(?:have\s+|already\s+)?(?:applied|applies|apply)\s+(?:to\s+|for\s+)", raw_lower)
+                or re.match(r"^mark(?:ed)?\s+.+\s+as\s+applied\b", raw_lower)
+            )
+            if is_nl_apply:
+                await handle_command(
+                    command_text=f"/apply {raw_msg}",
+                    chat_id=chat_id,
+                    bot_token=bot_token,
+                    allowed_chat_id=allowed_chat_id,
+                    client=client,
+                    db_path=db_path,
+                )
+                return
+
+            # Fast-path 4: Natural language dismiss / hide
+            m_nl_dismiss = re.match(
+                r"^(?:please\s+)?(?:dismiss|hide|ignore|remove|drop)\s+(.+)$",
+                raw_lower,
+            )
+            if m_nl_dismiss:
+                dismiss_target = re.sub(
+                    r"^(?:please\s+)?(?:dismiss|hide|ignore|remove|drop)\s+",
+                    "",
+                    raw_msg,
+                    flags=re.IGNORECASE,
+                ).strip()
+                dismiss_target = re.sub(
+                    r"\s+(?:from\s+(?:radar|tracker)|roles?|jobs?)$",
+                    "",
+                    dismiss_target,
+                    flags=re.IGNORECASE,
+                ).strip()
+                if dismiss_target:
+                    await handle_command(
+                        command_text=f"/dismiss {dismiss_target}",
+                        chat_id=chat_id,
+                        bot_token=bot_token,
+                        allowed_chat_id=allowed_chat_id,
+                        client=client,
+                        db_path=db_path,
+                    )
+                    return
+
+            logger.info("AI Query: %s from chat_id %s", raw_msg, chat_id)
+            try:
+                console.print(f"[green]AI Query:[/green] [bold]{raw_msg}[/bold] from chat_id [yellow]{chat_id}[/yellow]")
+            except Exception:
+                pass
+
+            stop_typing = asyncio.Event()
+            typing_task = asyncio.create_task(
+                _keep_typing_action(bot_token, chat_id, client, stop_typing)
+            )
+            try:
+                ai_reply = await ask_ai_agent(raw_msg, chat_id=chat_id, db_path=db_path, client=client)
+            finally:
+                stop_typing.set()
+                typing_task.cancel()
+                try:
+                    await typing_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+            await send_telegram_reply(bot_token, chat_id, ai_reply, client)
+    except Exception as exc:
+        logger.exception("Error processing update %s: %s", update.get("update_id"), exc)
+        try:
+            msg = update.get("message") or update.get("edited_message")
+            if msg and msg.get("chat", {}).get("id"):
+                await send_telegram_reply(
+                    bot_token,
+                    msg["chat"]["id"],
+                    "⚠️ <i>An error occurred while processing your request. Please try again.</i>",
+                    client,
+                )
+        except Exception:
+            pass
+
+
 async def run_bot_listener(
     bot_token: Optional[str] = None,
     allowed_chat_id: Optional[str] = None,
@@ -1416,188 +1614,66 @@ async def run_bot_listener(
         except Exception as err:
             logger.debug("Startup purge error: %s", err)
 
-        while True:
-            if max_iterations is not None and iteration >= max_iterations:
-                break
-            iteration += 1
+        active_tasks: set[asyncio.Task] = set()
+        try:
+            while True:
+                if max_iterations is not None and iteration >= max_iterations:
+                    break
+                iteration += 1
 
-            try:
-                params: dict[str, Any] = {"timeout": poll_timeout}
-                if offset is not None:
-                    params["offset"] = offset
+                try:
+                    params: dict[str, Any] = {"timeout": poll_timeout}
+                    if offset is not None:
+                        params["offset"] = offset
 
-                resp = await client.get(url, params=params)
-                if resp.status_code != 200:
-                    if resp.status_code == 409:
-                        logger.warning(
-                            "Telegram getUpdates returned 409 Conflict: another instance is connected. "
-                            "This is expected during zero-downtime rolling deployments while the previous container shuts down. Retrying in 5s..."
-                        )
-                        await sleep_func(5)
-                    else:
-                        logger.warning("Telegram getUpdates returned status %s: %s", resp.status_code, resp.text)
-                        await sleep_func(3)
-                    continue
-
-                data = resp.json()
-                updates = data.get("result", [])
-
-                for update in updates:
-                    offset = update["update_id"] + 1
-
-                    # Check for callback queries (interactive inline keyboard actions)
-                    if "callback_query" in update:
-                        cb_query = update["callback_query"]
-                        logger.info(
-                            "Received callback: %s from user %s",
-                            cb_query.get("data"),
-                            cb_query.get("from", {}).get("id"),
-                        )
-                        try:
-                            console.print(
-                                f"[magenta]Received callback:[/magenta] [bold]{cb_query.get('data')}[/bold] "
-                                f"from user [yellow]{cb_query.get('from', {}).get('id')}[/yellow]"
+                    resp = await client.get(url, params=params)
+                    if resp.status_code != 200:
+                        if resp.status_code == 409:
+                            logger.warning(
+                                "Telegram getUpdates returned 409 Conflict: another instance is connected. "
+                                "This is expected during zero-downtime rolling deployments while the previous container shuts down. Retrying in 5s..."
                             )
-                        except Exception:
-                            pass
-                        await handle_callback_query(
-                            callback_query=cb_query,
-                            bot_token=bot_token,
-                            allowed_chat_id=allowed_chat_id,
-                            client=client,
-                            db_path=db_path,
-                        )
+                            await sleep_func(5)
+                        else:
+                            logger.warning("Telegram getUpdates returned status %s: %s", resp.status_code, resp.text)
+                            await sleep_func(3)
                         continue
 
-                    message = update.get("message") or update.get("edited_message")
-                    if not message:
-                        continue
+                    data = resp.json()
+                    updates = data.get("result", [])
 
-                    chat = message.get("chat", {})
-                    chat_id = chat.get("id")
-                    text = message.get("text") or ""
-
-                    if text.startswith("/"):
-                        logger.info("Received command: %s from chat_id %s", text, chat_id)
-                        try:
-                            console.print(f"[cyan]Received command:[/cyan] [bold]{text}[/bold] from chat_id [yellow]{chat_id}[/yellow]")
-                        except Exception:
-                            pass
-                        await handle_command(
-                            command_text=text,
-                            chat_id=chat_id,
-                            bot_token=bot_token,
-                            allowed_chat_id=allowed_chat_id,
-                            client=client,
-                            db_path=db_path,
-                        )
-                    elif text.strip():
-                        if str(chat_id).strip() != str(allowed_chat_id).strip():
-                            logger.warning("Unauthorized access attempt from chat_id: %s", chat_id)
-                            await send_telegram_reply(
-                                bot_token,
-                                chat_id,
-                                "⛔ <b>Access Denied</b>: Your Telegram account is not authorized to control this GCC Job Radar bot.",
-                                client,
-                            )
-                            continue
-
-                        raw_msg = text.strip()
-                        raw_lower = raw_msg.lower()
-
-                        # Fast-path 1: Natural language scan new
-                        m_scan_new = re.match(
-                            r"^(?:run\s+)?scan\s+(?:the\s+)?(?:new|newly\s+added|recent)(?:\s+companies)?(?:\s+(\d+))?$",
-                            raw_lower,
-                        )
-                        if m_scan_new:
-                            count_val = m_scan_new.group(1)
-                            cmd_str = f"/scan new {count_val}".strip() if count_val else "/scan new"
-                            await handle_command(
-                                command_text=cmd_str,
-                                chat_id=chat_id,
+                    for update in updates:
+                        offset = update["update_id"] + 1
+                        t = asyncio.create_task(
+                            dispatch_single_update(
+                                update=update,
                                 bot_token=bot_token,
                                 allowed_chat_id=allowed_chat_id,
                                 client=client,
                                 db_path=db_path,
                             )
-                            continue
-
-                        # Fast-path 2: Natural language applied list / applications view
-                        if re.match(r"^(?:show\s+|view\s+|get\s+|my\s+)?(?:applied|applies|applications?)(?:\s+(?:list|jobs|roles|history))?$", raw_lower):
-                            await handle_command(
-                                command_text="/applied",
-                                chat_id=chat_id,
-                                bot_token=bot_token,
-                                allowed_chat_id=allowed_chat_id,
-                                client=client,
-                                db_path=db_path,
-                            )
-                            continue
-
-                        # Fast-path 3: Natural language apply
-                        is_nl_apply = (
-                            re.search(r"\b(?:applied|aoplies|applies)(?:\s+opening)?(?:\s+so\s+mark\s+.*)?$", raw_lower)
-                            or re.match(r"^(?:i\s+mean\s+)?(?:i\s+)?(?:have\s+|already\s+)?(?:applied|applies|apply)\s+(?:to\s+|for\s+)", raw_lower)
-                            or re.match(r"^mark(?:ed)?\s+.+\s+as\s+applied\b", raw_lower)
                         )
-                        if is_nl_apply:
-                            await handle_command(
-                                command_text=f"/apply {raw_msg}",
-                                chat_id=chat_id,
-                                bot_token=bot_token,
-                                allowed_chat_id=allowed_chat_id,
-                                client=client,
-                                db_path=db_path,
-                            )
-                            continue
+                        active_tasks.add(t)
+                        t.add_done_callback(active_tasks.discard)
 
-                        # Fast-path 3: Natural language dismiss / hide
-                        m_nl_dismiss = re.match(
-                            r"^(?:please\s+)?(?:dismiss|hide|ignore|remove|drop)\s+(.+)$",
-                            raw_lower,
-                        )
-                        if m_nl_dismiss:
-                            dismiss_target = re.sub(
-                                r"^(?:please\s+)?(?:dismiss|hide|ignore|remove|drop)\s+",
-                                "",
-                                raw_msg,
-                                flags=re.IGNORECASE,
-                            ).strip()
-                            dismiss_target = re.sub(
-                                r"\s+(?:from\s+(?:radar|tracker)|roles?|jobs?)$",
-                                "",
-                                dismiss_target,
-                                flags=re.IGNORECASE,
-                            ).strip()
-                            if dismiss_target:
-                                await handle_command(
-                                    command_text=f"/dismiss {dismiss_target}",
-                                    chat_id=chat_id,
-                                    bot_token=bot_token,
-                                    allowed_chat_id=allowed_chat_id,
-                                    client=client,
-                                    db_path=db_path,
-                                )
-                                continue
-
-                        logger.info("AI Query: %s from chat_id %s", raw_msg, chat_id)
-                        try:
-                            console.print(f"[green]AI Query:[/green] [bold]{raw_msg}[/bold] from chat_id [yellow]{chat_id}[/yellow]")
-                        except Exception:
-                            pass
-                        await send_telegram_chat_action(bot_token, chat_id, client, "typing")
-                        ai_reply = await ask_ai_agent(raw_msg, chat_id=chat_id, db_path=db_path, client=client)
-                        await send_telegram_reply(bot_token, chat_id, ai_reply, client)
-
-            except asyncio.CancelledError:
-                break
-            except httpx.ConnectTimeout:
-                logger.error(
-                    "Connection timeout connecting to api.telegram.org. If your local ISP blocks Telegram API, enable WARP/VPN or configure a proxy."
-                )
-                await sleep_func(5)
-            except Exception as exc:
-                logger.error("Error in bot polling loop: %s", exc)
-                await sleep_func(2)
+                except asyncio.CancelledError:
+                    break
+                except httpx.ConnectTimeout:
+                    logger.error(
+                        "Connection timeout connecting to api.telegram.org. If your local ISP blocks Telegram API, enable WARP/VPN or configure a proxy."
+                    )
+                    await sleep_func(5)
+                except Exception as exc:
+                    logger.error("Error in bot polling loop: %s", exc)
+                    await sleep_func(2)
+        finally:
+            if active_tasks:
+                logger.info("Awaiting %d in-flight Telegram task(s) during shutdown...", len(active_tasks))
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*list(active_tasks), return_exceptions=True),
+                        timeout=15.0,
+                    )
+                except (asyncio.TimeoutError, Exception):
+                    pass
 

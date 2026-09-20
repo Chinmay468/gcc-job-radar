@@ -151,6 +151,7 @@ def register_hiring_company(
     provider: Optional[ATSProvider] = None,
     board_token: Optional[str] = None,
     config_path: Optional[Path] = None,
+    probe: bool = False,
 ) -> Optional[CompanyConfig]:
     """Register a new hiring company into config.COMPANIES and persist to config.py.
 
@@ -160,6 +161,7 @@ def register_hiring_company(
         provider: Optional known ATSProvider.
         board_token: Optional known ATS board token.
         config_path: Optional path to config.py.
+        probe: Whether to make active network probes to discover ATS endpoints (default False).
 
     Returns:
         CompanyConfig if registered or existing, None if company is invalid.
@@ -178,8 +180,8 @@ def register_hiring_company(
     resolved_token = board_token or ""
     resolved_career_url = career_url or ""
 
-    # 1. If provider and token not specified, attempt live ATS probe
-    if not resolved_provider:
+    # 1. If provider and token not specified and probe=True, attempt live ATS probe
+    if not resolved_provider and probe:
         try:
             try:
                 loop = asyncio.get_running_loop()

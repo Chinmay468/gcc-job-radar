@@ -5763,6 +5763,20 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="Beta GCC", provider=ATSProvider.CUSTOM, board_token="betagcc", career_url="https://www.google.com/search?q=%22Beta+GCC%22+%22software+engineer%22+careers+jobs+apply"),
     CompanyConfig(name="Acme Tech", provider=ATSProvider.CUSTOM, board_token="acmetech", career_url="https://www.google.com/search?q=%22Acme+Tech%22+%22software+engineer%22+careers+jobs+apply"),
     CompanyConfig(name="Google", provider=ATSProvider.CUSTOM, board_token="google", career_url="https://careers.google.com"),
+    CompanyConfig(name="BeyondMath", provider=ATSProvider.ASHBY, board_token="beyondmath"),
+    CompanyConfig(name="Fable", provider=ATSProvider.ASHBY, board_token="fable"),
+    CompanyConfig(name="Fin", provider=ATSProvider.ASHBY, board_token="fin"),
+    CompanyConfig(name="Glean Labs", provider=ATSProvider.SMARTRECRUITERS, board_token="glean"),
+    CompanyConfig(name="Infinitus", provider=ATSProvider.ASHBY, board_token="infinitus"),
+    CompanyConfig(name="Kore.ai", provider=ATSProvider.SMARTRECRUITERS, board_token="koreai"),
+    CompanyConfig(name="OpsLevel", provider=ATSProvider.ASHBY, board_token="opslevel"),
+    CompanyConfig(name="Tigera", provider=ATSProvider.GREENHOUSE, board_token="tigera"),
+    CompanyConfig(name="WunderGraph", provider=ATSProvider.ASHBY, board_token="wundergraph"),
+    CompanyConfig(name="DataGuard", provider=ATSProvider.ASHBY, board_token="dataguard"),
+    CompanyConfig(name="Obsidian Security", provider=ATSProvider.GREENHOUSE, board_token="obsidiansecuritycareers"),
+    CompanyConfig(name="CivicPlus", provider=ATSProvider.GREENHOUSE, board_token="civicplus"),
+    CompanyConfig(name="Curai", provider=ATSProvider.LEVER, board_token="curai"),
+    CompanyConfig(name="Veda", provider=ATSProvider.ASHBY, board_token="veda"),
 ]
 
 # Strict entry-level tech title positive pattern

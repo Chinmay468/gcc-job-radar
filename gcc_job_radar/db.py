@@ -288,8 +288,10 @@ def init_db(db_path: Optional[Path] = None) -> None:
     target_path = get_db_path(db_path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with sqlite3.connect(target_path) as conn:
+    with sqlite3.connect(target_path, timeout=30.0) as conn:
         cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA busy_timeout=30000;")
         from gcc_job_radar.schema import (
             BASE_TABLE_STATEMENTS,
             INDEX_AND_VIEW_STATEMENTS,

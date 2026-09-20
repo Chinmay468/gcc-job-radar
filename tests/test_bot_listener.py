@@ -999,6 +999,87 @@ async def test_sync_telegram_bot_commands() -> None:
         assert "help" in cmd_names
 
 
+@pytest.mark.asyncio
+async def test_concurrent_update_dispatching() -> None:
+    """Verify run_bot_listener dispatches updates concurrently without blocking getUpdates."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    order_of_events = []
+
+    async def slow_ai_agent(text, chat_id=None, db_path=None, client=None):
+        order_of_events.append("ai_start")
+        await asyncio.sleep(0.05)
+        order_of_events.append("ai_end")
+        return "AI response"
+
+    class MockAsyncClient:
+        def __init__(self):
+            self.sent_messages = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+        async def get(self, url, params=None):
+            # First call returns 2 updates: 1 slow AI query, 1 fast /help command
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "result": [
+                        {
+                            "update_id": 101,
+                            "message": {
+                                "chat": {"id": 123456},
+                                "text": "Any new update",
+                            },
+                        },
+                        {
+                            "update_id": 102,
+                            "message": {
+                                "chat": {"id": 123456},
+                                "text": "/help",
+                            },
+                        },
+                    ],
+                },
+            )
+
+        async def post(self, url, json=None, files=None, data=None, timeout=None):
+            if "sendMessage" in str(url):
+                text = (json or {}).get("text", "")
+                if "Commands Menu" in text or "Core Actions" in text:
+                    order_of_events.append("help_replied")
+                elif "AI response" in text:
+                    order_of_events.append("ai_replied")
+            return httpx.Response(200, json={"ok": True, "result": True})
+
+    mock_client = MockAsyncClient()
+    mock_sleep = AsyncMock()
+
+    with patch("gcc_job_radar.bot_listener.httpx.AsyncClient", return_value=mock_client), \
+         patch("gcc_job_radar.bot_listener.ask_ai_agent", side_effect=slow_ai_agent):
+        from gcc_job_radar.bot_listener import run_bot_listener
+        await run_bot_listener(
+            bot_token="test_token",
+            allowed_chat_id="123456",
+            max_iterations=1,
+            sleep_func=mock_sleep,
+        )
+
+    # Both updates must have completed:
+    assert "ai_start" in order_of_events
+    assert "ai_end" in order_of_events
+    assert "help_replied" in order_of_events
+    assert "ai_replied" in order_of_events
+    # The fast /help command should complete before the slow AI query finishes
+    assert order_of_events.index("help_replied") < order_of_events.index("ai_end")
+
+
+
 
 
 

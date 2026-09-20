@@ -947,7 +947,11 @@ def filter_and_convert_jobs(
             try:
                 from gcc_job_radar.company_tracker import is_known_company, register_hiring_company
                 if not is_known_company(clean_company):
-                    register_hiring_company(clean_company, career_url=clean_url if "careers" in clean_url else None)
+                    register_hiring_company(
+                        clean_company,
+                        career_url=clean_url if "careers" in clean_url else None,
+                        probe=False,
+                    )
             except Exception as exc:
                 logger.debug("Error auto-registering company %s: %s", clean_company, exc)
 
