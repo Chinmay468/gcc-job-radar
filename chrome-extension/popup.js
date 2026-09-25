@@ -39,10 +39,19 @@ const hardBlocksList = document.getElementById("hard-blocks-list");
 const warningsContainer = document.getElementById("warnings-container");
 const warningsList = document.getElementById("warnings-list");
 
-// Tailor card elements
+// Master Resume Preview
+const btnViewMasterPdf = document.getElementById("btn-view-master-pdf");
+
+// Tailor & Preview card elements
 const tailorCard = document.getElementById("tailor-card");
+const previewStatusTitle = document.getElementById("preview-status-title");
 const tailorFilename = document.getElementById("tailor-filename");
-const btnDownloadPdf = document.getElementById("btn-download-pdf");
+const btnOpenFullTab = document.getElementById("btn-open-full-tab");
+const pdfPreviewFrame = document.getElementById("pdf-preview-frame");
+const inputFeedback = document.getElementById("input-feedback");
+const btnRefine = document.getElementById("btn-refine");
+const refineStatus = document.getElementById("refine-status");
+const btnConfirmDownload = document.getElementById("btn-confirm-download");
 const btnViewDiff = document.getElementById("btn-view-diff");
 const btnMarkApplied = document.getElementById("btn-mark-applied");
 const diffContainer = document.getElementById("diff-container");
@@ -52,6 +61,10 @@ const footerDbStats = document.getElementById("footer-db-stats");
 
 let currentActiveUrl = "";
 let currentEvaluation = null;
+let currentFilename = "";
+let currentDownloadUrl = "";
+let currentViewUrl = "";
+let currentVersion = 1;
 
 // Initialize on DOM ready
 document.addEventListener("DOMContentLoaded", async () => {
@@ -66,10 +79,36 @@ function setupEventListeners() {
   btnReextract.addEventListener("click", loadJobFromActiveTab);
   btnEvaluate.addEventListener("click", handleEvaluate);
   btnTailor.addEventListener("click", handleTailor);
+  btnRefine.addEventListener("click", handleRefine);
+  btnConfirmDownload.addEventListener("click", handleDownloadResume);
   btnViewDiff.addEventListener("click", () => {
     diffContainer.classList.toggle("hidden");
   });
   btnMarkApplied.addEventListener("click", handleMarkApplied);
+
+  if (btnViewMasterPdf) {
+    btnViewMasterPdf.addEventListener("click", (e) => {
+      e.preventDefault();
+      openUrlInTab(`${BRIDGE_URL}/view/master_resume.pdf`);
+    });
+  }
+
+  if (btnOpenFullTab) {
+    btnOpenFullTab.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (currentViewUrl) {
+        openUrlInTab(currentViewUrl);
+      }
+    });
+  }
+}
+
+function openUrlInTab(url) {
+  if (chrome.tabs && chrome.tabs.create) {
+    chrome.tabs.create({ url: url });
+  } else {
+    window.open(url, "_blank");
+  }
 }
 
 function updateCharCount() {
@@ -281,7 +320,7 @@ function renderEvaluation(data) {
   evalCard.classList.remove("hidden");
 }
 
-// 4. Handle Tailor & Compile PDF
+// 4. Handle Tailor & Compile PDF (Live Preview)
 async function handleTailor() {
   const jd_text = inputJd.value.trim();
   const company = inputCompany.value.trim() || "Target_Company";
@@ -294,6 +333,7 @@ async function handleTailor() {
 
   showLoading("Tailoring LaTeX with Groq & Compiling PDF via Tectonic (~1.4s)...");
   tailorCard.classList.add("hidden");
+  hideRefineStatus();
 
   try {
     const res = await fetch(`${BRIDGE_URL}/tailor`, {
@@ -313,24 +353,23 @@ async function handleTailor() {
     }
 
     const data = await res.json();
+    currentFilename = data.filename;
+    currentDownloadUrl = data.download_url;
+    currentViewUrl = data.view_url;
+    currentVersion = 1;
 
-    // Setup download button
+    // Setup preview card
+    previewStatusTitle.textContent = "Resume Preview (Tailored v1)";
     tailorFilename.textContent = data.filename;
-    btnDownloadPdf.href = data.download_url;
-    btnDownloadPdf.setAttribute("download", data.filename);
-
-    // Auto-trigger browser download via chrome.downloads API if available
-    if (chrome.downloads && data.download_url) {
-      chrome.downloads.download({
-        url: data.download_url,
-        filename: data.filename,
-        saveAs: false,
-      });
-    }
+    btnOpenFullTab.href = data.view_url;
+    pdfPreviewFrame.src = `${data.view_url}?t=${Date.now()}`;
 
     // Diff view
     diffContent.textContent = data.diff || "No structural diff.";
     tailorCard.classList.remove("hidden");
+
+    // Scroll into preview card
+    tailorCard.scrollIntoView({ behavior: "smooth" });
   } catch (err) {
     alert(`Resume tailoring failed: ${err.message}\nMake sure Groq API key and Tectonic are available.`);
   } finally {
@@ -338,7 +377,116 @@ async function handleTailor() {
   }
 }
 
-// 5. Handle Mark Applied in Radar DB
+// 5. Handle Iterative Refinement
+async function handleRefine() {
+  const feedback = inputFeedback.value.trim();
+  if (!feedback) {
+    showRefineStatus("Please describe what changes you want to make (e.g. emphasize a project or skill).", true);
+    return;
+  }
+
+  if (!currentFilename) {
+    showRefineStatus("Please click 'Tailor & Compile PDF' first to generate an initial resume.", true);
+    return;
+  }
+
+  const jd_text = inputJd.value.trim();
+  const company = inputCompany.value.trim() || "Target_Company";
+  const role = inputTitle.value.trim() || "Software_Engineer";
+
+  btnRefine.disabled = true;
+  btnRefine.innerHTML = `<span class="spinner" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin:0 4px 0 0;"></span> Applying Changes (~2s)...`;
+  hideRefineStatus();
+
+  try {
+    const res = await fetch(`${BRIDGE_URL}/refine`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: currentFilename,
+        feedback: feedback,
+        jd_text: jd_text,
+        company: company,
+        role: role,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    currentVersion += 1;
+    currentFilename = data.filename;
+    currentDownloadUrl = data.download_url;
+    currentViewUrl = data.view_url;
+
+    // Refresh preview frame
+    previewStatusTitle.textContent = `Resume Preview (Refined v${currentVersion})`;
+    tailorFilename.textContent = data.filename;
+    btnOpenFullTab.href = data.view_url;
+    pdfPreviewFrame.src = `${data.view_url}?t=${Date.now()}`;
+
+    // Update diff
+    if (data.diff) {
+      diffContent.textContent = data.diff;
+    }
+
+    inputFeedback.value = "";
+    showRefineStatus(`✨ Changes applied and PDF recompiled! Check preview below. You can refine again or download.`);
+  } catch (err) {
+    showRefineStatus(`Refinement failed: ${err.message}`, true);
+  } finally {
+    btnRefine.disabled = false;
+    btnRefine.innerHTML = `<span class="btn-icon">🔄</span> Refine & Refresh Preview`;
+  }
+}
+
+// 6. Handle User-Confirmed Download
+function handleDownloadResume() {
+  if (!currentDownloadUrl) {
+    alert("No compiled resume available to download.");
+    return;
+  }
+
+  if (chrome.downloads && chrome.downloads.download) {
+    chrome.downloads.download({
+      url: currentDownloadUrl,
+      filename: currentFilename,
+      saveAs: false,
+    }, (downloadId) => {
+      if (chrome.runtime.lastError) {
+        window.open(currentDownloadUrl, "_blank");
+      }
+    });
+  } else {
+    const a = document.createElement("a");
+    a.href = currentDownloadUrl;
+    a.download = currentFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  const prevText = btnConfirmDownload.innerHTML;
+  btnConfirmDownload.innerHTML = `<span>✅ Download Started!</span>`;
+  setTimeout(() => {
+    btnConfirmDownload.innerHTML = prevText;
+  }, 2500);
+}
+
+function showRefineStatus(msg, isError = false) {
+  refineStatus.textContent = msg;
+  refineStatus.className = `refine-status ${isError ? "error" : ""}`;
+  refineStatus.classList.remove("hidden");
+}
+
+function hideRefineStatus() {
+  refineStatus.classList.add("hidden");
+}
+
+// 7. Handle Mark Applied in Radar DB
 async function handleMarkApplied() {
   const company = inputCompany.value.trim();
   const title = inputTitle.value.trim();

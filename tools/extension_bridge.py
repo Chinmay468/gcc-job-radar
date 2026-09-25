@@ -47,6 +47,7 @@ from builder.evaluate import (
 )
 from builder.resume_tailor import (
     tailor_resume,
+    refine_resume,
     compile_pdf,
     load_dotenv_if_present,
 )
@@ -64,7 +65,7 @@ MASTER_RESUME_PATH = BUILDER_DIR / "master_resume.tex"
 OUTPUT_DIR = BUILDER_DIR / "output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# Ensure resume.cls is available in output directory
+# Ensure resume.cls and master_resume.pdf are available in output directory
 CLS_SOURCE = BUILDER_DIR / "resume.cls"
 CLS_DEST = OUTPUT_DIR / "resume.cls"
 if CLS_SOURCE.exists() and not CLS_DEST.exists():
@@ -72,6 +73,14 @@ if CLS_SOURCE.exists() and not CLS_DEST.exists():
         shutil.copy2(CLS_SOURCE, CLS_DEST)
     except Exception as e:
         logger.warning(f"Could not copy resume.cls to output dir: {e}")
+
+MASTER_PDF_SOURCE = BUILDER_DIR / "master_resume.pdf"
+MASTER_PDF_DEST = OUTPUT_DIR / "master_resume.pdf"
+if MASTER_PDF_SOURCE.exists():
+    try:
+        shutil.copy2(MASTER_PDF_SOURCE, MASTER_PDF_DEST)
+    except Exception as e:
+        logger.warning(f"Could not copy master_resume.pdf to output dir: {e}")
 
 PORT = 8765
 
@@ -117,7 +126,10 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.handle_health()
         elif path.startswith("/download/"):
             filename = urllib.parse.unquote(path[len("/download/"):].strip())
-            self.handle_download(filename)
+            self.handle_download(filename, as_attachment=True)
+        elif path.startswith("/view/"):
+            filename = urllib.parse.unquote(path[len("/view/"):].strip())
+            self.handle_download(filename, as_attachment=False)
         else:
             self._send_json(404, {"error": "Not Found", "path": path})
 
@@ -129,6 +141,8 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.handle_evaluate()
         elif path == "/tailor":
             self.handle_tailor()
+        elif path == "/refine":
+            self.handle_refine()
         elif path == "/record_job":
             self.handle_record_job()
         else:
@@ -315,23 +329,105 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         diff_summary = "\n".join(diff_lines[:100])
 
         download_url = f"http://127.0.0.1:{PORT}/download/{pdf_filename}"
+        view_url = f"http://127.0.0.1:{PORT}/view/{pdf_filename}"
         logger.info(f"Successfully compiled: {pdf_filename} -> {download_url}")
 
         self._send_json(200, {
             "success": True,
             "filename": pdf_filename,
             "download_url": download_url,
+            "view_url": view_url,
             "tex_path": str(tex_path),
             "pdf_path": str(pdf_path),
             "diff": diff_summary,
             "status": "ready",
         })
 
-    def handle_download(self, filename: str):
-        """Serves compiled PDF directly to browser for download."""
+    def handle_refine(self):
+        """Refines existing tailored resume based on user feedback and recompiles via Tectonic."""
+        body = self._read_json_body()
+        filename = body.get("filename", "").strip()
+        feedback = body.get("feedback", "").strip()
+        jd_text = body.get("jd_text", "").strip()
+        company = body.get("company", "").strip() or "Company"
+        role = body.get("role", "").strip() or "Software_Engineer"
+
+        if not feedback:
+            self._send_json(400, {"error": "Missing 'feedback' text in request."})
+            return
+
+        base_name = os.path.splitext(os.path.basename(filename))[0] if filename else f"Chinmay_Maheshwari_{company}_{role}"
+        base_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", base_name).strip("_")
+        tex_path = OUTPUT_DIR / f"{base_name}.tex"
+        pdf_path = OUTPUT_DIR / f"{base_name}.pdf"
+
+        if tex_path.exists():
+            with open(tex_path, "r", encoding="utf-8") as f:
+                current_tex = f.read()
+        elif MASTER_RESUME_PATH.exists():
+            with open(MASTER_RESUME_PATH, "r", encoding="utf-8") as f:
+                current_tex = f.read()
+        else:
+            self._send_json(404, {"error": "Resume file not found to refine."})
+            return
+
+        logger.info(f"Refining resume for {company} — {role} with feedback: '{feedback[:60]}...'")
+
+        try:
+            refined_tex = refine_resume(
+                current_tex=current_tex,
+                feedback=feedback,
+                job_description=jd_text,
+                company=company,
+                role=role,
+            )
+        except Exception as e:
+            logger.error(f"Refinement failed: {e}")
+            self._send_json(500, {"error": f"Refinement failed: {e}"})
+            return
+
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(refined_tex)
+
+        compile_ok = compile_pdf(str(tex_path))
+        if not compile_ok or not pdf_path.exists():
+            self._send_json(500, {
+                "error": "LaTeX updated but PDF compilation failed.",
+                "tex_code": refined_tex,
+            })
+            return
+
+        diff_lines = list(difflib.unified_diff(
+            current_tex.splitlines(),
+            refined_tex.splitlines(),
+            fromfile="previous.tex",
+            tofile=f"{base_name}.tex",
+            lineterm="",
+        ))
+        diff_summary = "\n".join(diff_lines[:100])
+
+        pdf_filename = f"{base_name}.pdf"
+        download_url = f"http://127.0.0.1:{PORT}/download/{pdf_filename}"
+        view_url = f"http://127.0.0.1:{PORT}/view/{pdf_filename}"
+
+        self._send_json(200, {
+            "success": True,
+            "filename": pdf_filename,
+            "download_url": download_url,
+            "view_url": view_url,
+            "diff": diff_summary,
+            "message": "Resume refined and recompiled successfully!",
+        })
+
+    def handle_download(self, filename: str, as_attachment: bool = True):
+        """Serves compiled PDF directly to browser (inline preview or attachment download)."""
         # Prevent directory traversal
         safe_name = os.path.basename(filename)
         file_path = OUTPUT_DIR / safe_name
+        if not file_path.exists() or not file_path.is_file():
+            fallback_path = BUILDER_DIR / safe_name
+            if fallback_path.exists() and fallback_path.is_file():
+                file_path = fallback_path
 
         if not file_path.exists() or not file_path.is_file():
             self._send_json(404, {"error": "File not found", "filename": safe_name})
@@ -340,9 +436,10 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         with open(file_path, "rb") as f:
             pdf_bytes = f.read()
 
+        disp_type = "attachment" if as_attachment else "inline"
         self.send_response(200)
         self._set_cors_headers("application/pdf")
-        self.send_header("Content-Disposition", f'attachment; filename="{safe_name}"')
+        self.send_header("Content-Disposition", f'{disp_type}; filename="{safe_name}"')
         self.send_header("Content-Length", str(len(pdf_bytes)))
         self.end_headers()
         self.wfile.write(pdf_bytes)

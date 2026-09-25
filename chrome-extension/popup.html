@@ -36,7 +36,10 @@
     <section class="card">
       <div class="card-header">
         <span class="card-title">Job Description</span>
-        <button id="btn-reextract" class="btn-text" title="Re-extract from current page">🔄 Refresh from Page</button>
+        <div class="card-header-actions">
+          <a id="btn-view-master-pdf" class="btn-text" href="#" title="View base Master Resume PDF">📄 Base Master PDF</a>
+          <button id="btn-reextract" class="btn-text" title="Re-extract from current page">🔄 Refresh from Page</button>
+        </div>
       </div>
 
       <div class="form-row">
@@ -118,31 +121,66 @@
       </div>
     </section>
 
-    <!-- Tailored Resume Output Card -->
+    <!-- Tailored Resume Preview & Refinement Studio -->
     <section id="tailor-card" class="card tailor-card hidden">
       <div class="tailor-header">
-        <span class="tailor-icon">🎉</span>
-        <div>
-          <div class="tailor-title">PDF Ready (Zero Overleaf)</div>
-          <div id="tailor-filename" class="tailor-subtitle">Chinmay_Maheshwari_Resume.pdf</div>
+        <div class="tailor-header-left">
+          <span class="tailor-icon">📄</span>
+          <div>
+            <div class="tailor-title" id="preview-status-title">Resume Preview (Live Tectonic Compile)</div>
+            <div id="tailor-filename" class="tailor-subtitle">Chinmay_Maheshwari_Resume.pdf</div>
+          </div>
+        </div>
+        <div class="tailor-header-right">
+          <a id="btn-open-full-tab" class="btn-text preview-tab-link" href="#" target="_blank" title="Open full resolution PDF in new browser tab">
+            🔍 Open in Full Tab
+          </a>
         </div>
       </div>
 
+      <!-- Live PDF Preview Frame -->
+      <div class="preview-frame-container">
+        <iframe id="pdf-preview-frame" class="pdf-preview-frame" src="" title="Resume Preview"></iframe>
+        <div class="preview-overlay-info">
+          <span>💡 Live PDF preview. Click "Open in Full Tab" for zoom & multi-page view.</span>
+        </div>
+      </div>
+
+      <!-- Refinement / Feedback Loop Section -->
+      <div class="refine-container">
+        <div class="refine-header">
+          <label for="input-feedback" class="refine-label">
+            <span>✨ Suggest Changes / Tweaks to Resume</span>
+          </label>
+        </div>
+        <textarea id="input-feedback" rows="2" placeholder="e.g. Emphasize Kafka, Redis locking & system design in summary. Swap project order. Mention Docker deployment in Skill-Bridge..."></textarea>
+        
+        <div class="refine-actions">
+          <button id="btn-refine" class="btn btn-secondary">
+            <span class="btn-icon">🔄</span> Refine & Refresh Preview
+          </button>
+        </div>
+        <div id="refine-status" class="refine-status hidden"></div>
+      </div>
+
+      <!-- Final Actions (Download & Track) -->
       <div class="tailor-actions">
-        <a id="btn-download-pdf" class="btn btn-success" href="#" download>
-          <span>⬇️ Download Tailored PDF</span>
-        </a>
-        <button id="btn-view-diff" class="btn btn-outline">
-          <span>👀 View Diff</span>
+        <button id="btn-confirm-download" class="btn btn-success">
+          <span class="btn-icon">⬇️</span> Looks Good, Download PDF
         </button>
-        <button id="btn-mark-applied" class="btn btn-outline">
-          <span>✅ Mark Applied in Radar</span>
-        </button>
+        <div class="secondary-actions">
+          <button id="btn-view-diff" class="btn btn-outline flex-1">
+            <span>👀 View Diff</span>
+          </button>
+          <button id="btn-mark-applied" class="btn btn-outline flex-1">
+            <span>✅ Mark Applied in Radar</span>
+          </button>
+        </div>
       </div>
 
       <!-- Collapsible Diff View -->
       <div id="diff-container" class="diff-container hidden">
-        <div class="diff-header">Unified Diff (Tailored vs Master)</div>
+        <div class="diff-header">Unified Diff (Tailored vs Baseline)</div>
         <pre id="diff-content" class="diff-pre"></pre>
       </div>
     </section>

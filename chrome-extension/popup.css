@@ -26,8 +26,8 @@
 }
 
 body {
-  width: 440px;
-  max-height: 590px;
+  width: 480px;
+  max-height: 600px;
   overflow-y: auto;
   font-family: var(--font-family);
   background-color: var(--bg-primary);
@@ -177,6 +177,12 @@ body::-webkit-scrollbar-thumb {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .card-title {
@@ -488,8 +494,16 @@ input[type="text"]:focus, textarea:focus {
 
 .tailor-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 10px;
+}
+
+.tailor-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .tailor-icon {
@@ -508,10 +522,109 @@ input[type="text"]:focus, textarea:focus {
   word-break: break-all;
 }
 
+.preview-tab-link {
+  background-color: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  white-space: nowrap;
+  font-size: 11px;
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.preview-tab-link:hover {
+  background-color: rgba(14, 165, 233, 0.3);
+  text-decoration: none;
+}
+
+/* Live PDF Preview Frame */
+.preview-frame-container {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.pdf-preview-frame {
+  width: 100%;
+  height: 290px;
+  border: none;
+  background: #ffffff;
+  display: block;
+}
+
+.preview-overlay-info {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 5px 8px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Refinement / Feedback Loop Section */
+.refine-container {
+  background-color: rgba(14, 165, 233, 0.06);
+  border: 1px dashed rgba(14, 165, 233, 0.35);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.refine-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.refine-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7dd3fc;
+}
+
+.refine-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.refine-status {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  text-align: center;
+}
+
+.refine-status.error {
+  background: rgba(244, 63, 94, 0.15);
+  color: #fda4af;
+  border-color: rgba(244, 63, 94, 0.3);
+}
+
 .tailor-actions {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+.secondary-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
 }
 
 /* Diff Container */
