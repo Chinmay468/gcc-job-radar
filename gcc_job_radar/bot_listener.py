@@ -896,14 +896,21 @@ async def handle_command(
         )
         await send_telegram_reply(bot_token, chat_id, scan_msg, client)
 
+        stop_typing = asyncio.Event()
+        typing_task = asyncio.create_task(
+            _keep_typing_action(bot_token, chat_id, client, stop_typing)
+        )
         try:
-            jobs = await asyncio.to_thread(
-                sync_email_alerts,
-                days=7,
-                limit=15,
-                unread_only=False,
-                db_path=db_path,
-                notify=False,
+            jobs = await asyncio.wait_for(
+                asyncio.to_thread(
+                    sync_email_alerts,
+                    days=7,
+                    limit=10,
+                    unread_only=False,
+                    db_path=db_path,
+                    notify=False,
+                ),
+                timeout=120.0,
             )
             if jobs:
                 reply = format_jobs_html(jobs, f"New Email Job Alerts ({len(jobs)})")
@@ -914,10 +921,24 @@ async def handle_command(
                     f"Checked {len(accounts)} email account(s):\n{acc_list}\n\n"
                     f"No new unrecorded entry-level tech job alerts found in the last 7 days."
                 )
+        except asyncio.TimeoutError:
+            logger.warning("Email alert sync timed out after 120s")
+            reply = (
+                "⏳ <b>Email Sync Timed Out</b>\n\n"
+                "Scanning took longer than 2 minutes. The mailboxes have many messages; "
+                "processed jobs have been saved to your database. Try running again or check <code>/latest</code>."
+            )
         except Exception as exc:
             logger.exception("Error syncing email alerts")
             clean_err = re.sub(r"\[/?(bold|dim|cyan|red)[^\]]*\]", "", str(exc))
             reply = f"❌ Error checking email accounts: {html.escape(clean_err)}"
+        finally:
+            stop_typing.set()
+            typing_task.cancel()
+            try:
+                await typing_task
+            except (asyncio.CancelledError, Exception):
+                pass
         await send_telegram_reply(bot_token, chat_id, reply, client)
 
     elif cmd in ("/accio", "/acciojob"):

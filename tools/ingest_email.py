@@ -1012,7 +1012,7 @@ def fetch_unread_alert_emails(
         console.print(
             f"[*] Connecting to [bold cyan]{server}:{port}[/bold cyan] ({email_user}) via IMAP SSL..."
         )
-        imap_client = imaplib.IMAP4_SSL(server, port=port)
+        imap_client = imaplib.IMAP4_SSL(server, port=port, timeout=15.0)
         imap_client.login(email_user, email_pass)
         owns_client = True
 
