@@ -32,11 +32,19 @@ ENV/
 
 # SQLite Database & Results
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 gcc_jobs.db
 latest_openings.json
 latest_openings.csv
 findings.json
 findings.csv
+
+# Binary Executables & Tools
+*.exe
+tools/bin/*
+!tools/bin/.gitkeep
 
 # Testing & Coverage
 .pytest_cache/

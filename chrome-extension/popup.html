@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GCC Job Radar & Resume Tailor</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-radar">
+          <span class="radar-sweep"></span>
+        </div>
+        <div>
+          <h1 class="title">GCC Job Radar</h1>
+          <p class="subtitle">AI Evaluator & Resume Tailor</p>
+        </div>
+      </div>
+      <div id="bridge-status" class="status-badge status-checking" title="Checking local bridge on 127.0.0.1:8765">
+        <span class="status-dot"></span>
+        <span class="status-text">Checking...</span>
+      </div>
+    </header>
+
+    <!-- Bridge Warning Banner (hidden when online) -->
+    <div id="bridge-warning" class="bridge-warning hidden">
+      <span>⚠️ Local Bridge is offline.</span>
+      <button id="btn-retry-bridge" class="btn-text">Retry</button>
+      <div class="bridge-help">Run <code>python tools/extension_bridge.py</code> in project root.</div>
+    </div>
+
+    <!-- Job Info Input Card -->
+    <section class="card">
+      <div class="card-header">
+        <span class="card-title">Job Description</span>
+        <button id="btn-reextract" class="btn-text" title="Re-extract from current page">🔄 Refresh from Page</button>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group flex-1">
+          <label for="input-company">Company</label>
+          <input type="text" id="input-company" placeholder="e.g. Visa, Mastercard, Potpie AI">
+        </div>
+        <div class="form-group flex-1">
+          <label for="input-title">Role / Title</label>
+          <input type="text" id="input-title" placeholder="e.g. Software Engineer, Java Dev">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="jd-header-label">
+          <label for="input-jd">Job Description Text</label>
+          <span id="jd-char-count" class="char-count">0 chars</span>
+        </div>
+        <textarea id="input-jd" rows="5" placeholder="Paste JD or browse to any job page to auto-extract..."></textarea>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="button-group">
+        <button id="btn-evaluate" class="btn btn-secondary">
+          <span class="btn-icon">⚡</span> Evaluate Fit
+        </button>
+        <button id="btn-tailor" class="btn btn-primary">
+          <span class="btn-icon">📄</span> Tailor & Compile PDF
+        </button>
+      </div>
+    </section>
+
+    <!-- Progress / Loading Indicator -->
+    <div id="loading-card" class="card loading-card hidden">
+      <div class="spinner"></div>
+      <div id="loading-text" class="loading-text">Analyzing job description...</div>
+    </div>
+
+    <!-- Evaluation Results Card -->
+    <section id="eval-card" class="card hidden">
+      <div class="card-header">
+        <span class="card-title">Fit Evaluation</span>
+        <span id="verdict-badge" class="verdict-badge">APPLY</span>
+      </div>
+
+      <div class="score-display">
+        <div class="score-number-wrap">
+          <span id="score-val" class="score-number">95</span>
+          <span class="score-total">/100</span>
+        </div>
+        <div class="score-meta">
+          <div id="one-line-reason" class="one-line-reason">Strong match on core Java/Spring Boot stack.</div>
+          <div id="apply-action" class="apply-action">Apply with Java Backend profile.</div>
+        </div>
+      </div>
+
+      <!-- Skill Pills -->
+      <div id="matched-skills-container" class="skills-block hidden">
+        <div class="skills-title">Matched Stack</div>
+        <div id="matched-skills" class="pill-group"></div>
+      </div>
+
+      <div id="missing-skills-container" class="skills-block hidden">
+        <div class="skills-title">Missing / New Skills</div>
+        <div id="missing-skills" class="pill-group"></div>
+      </div>
+
+      <!-- Flags -->
+      <div id="green-flags-container" class="flags-block hidden">
+        <ul id="green-flags-list" class="flags-list green-flags"></ul>
+      </div>
+
+      <div id="hard-blocks-container" class="flags-block hidden">
+        <ul id="hard-blocks-list" class="flags-list hard-blocks"></ul>
+      </div>
+
+      <div id="warnings-container" class="flags-block hidden">
+        <ul id="warnings-list" class="flags-list warnings"></ul>
+      </div>
+    </section>
+
+    <!-- Tailored Resume Output Card -->
+    <section id="tailor-card" class="card tailor-card hidden">
+      <div class="tailor-header">
+        <span class="tailor-icon">🎉</span>
+        <div>
+          <div class="tailor-title">PDF Ready (Zero Overleaf)</div>
+          <div id="tailor-filename" class="tailor-subtitle">Chinmay_Maheshwari_Resume.pdf</div>
+        </div>
+      </div>
+
+      <div class="tailor-actions">
+        <a id="btn-download-pdf" class="btn btn-success" href="#" download>
+          <span>⬇️ Download Tailored PDF</span>
+        </a>
+        <button id="btn-view-diff" class="btn btn-outline">
+          <span>👀 View Diff</span>
+        </button>
+        <button id="btn-mark-applied" class="btn btn-outline">
+          <span>✅ Mark Applied in Radar</span>
+        </button>
+      </div>
+
+      <!-- Collapsible Diff View -->
+      <div id="diff-container" class="diff-container hidden">
+        <div class="diff-header">Unified Diff (Tailored vs Master)</div>
+        <pre id="diff-content" class="diff-pre"></pre>
+      </div>
+    </section>
+
+    <!-- Footer Stats -->
+    <footer class="footer">
+      <div id="footer-db-stats">Radar DB: Connected</div>
+      <div class="footer-compiler">Engine: Tectonic (1.4s)</div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
