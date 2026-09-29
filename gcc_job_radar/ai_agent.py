@@ -75,7 +75,10 @@ SYSTEM_PROMPT = (
     "- Use `sync_email_jobs` ONLY when the user explicitly asks to scan, check, go through, or ingest job alert emails (e.g. 'check my email', 'scan inbox', 'sync email alerts') from their configured email accounts.\n"
     "- FOR GENERAL STATUS OR UPDATE QUERIES (e.g. 'Any new update', 'Any updates?', 'What\\'s new?', 'Show new openings'): ALWAYS invoke `query_jobs(status='NEW', limit=5)` to retrieve the latest open listings from the tracker database. DO NOT invoke `sync_email_jobs` unless emails/inboxes are specifically requested.\n"
     "- Use `scan_acciojob_portal` whenever the user asks to check, scan, or fetch fresh early-career tech jobs and hiring drives from the AccioJob portal.\n"
-    "- NEVER mention internal function or tool names (such as `manage_job_status`, `query_jobs`, `get_applied_jobs`, `sync_email_jobs`, `execute_tool`) to the user. Always advise the user using standard user-facing commands (e.g. `/apply <id>`, `/applied`, `/dismiss <id>`, `/scan`, `/sync`).\n"
+    "- LIVE INTERNET & JOB BOARD SEARCH:\n"
+    "  • When the user asks to find, search, or look for jobs for a particular profession, role, domain, tech stack, or location on the internet or across job boards (e.g. 'find me Java developer roles in Bangalore', 'search for React jobs', 'look for SDE-1 remote jobs', 'find me a job for a frontend developer', 'search the web for junior backend jobs'): ALWAYS invoke the `search_internet_jobs` tool immediately.\n"
+    "  • Extract the profession/role as `query` (e.g. 'Java Developer', 'React Frontend'), location (e.g. 'Bangalore', 'Remote', 'India'), and experience level (e.g. 'entry-level', '0-1 years').\n"
+    "- NEVER mention internal function or tool names (such as `manage_job_status`, `query_jobs`, `get_applied_jobs`, `sync_email_jobs`, `search_internet_jobs`, `execute_tool`) to the user. Always advise the user using standard user-facing commands (e.g. `/search <profession>`, `/apply <id>`, `/applied`, `/dismiss <id>`, `/scan`, `/sync`).\n"
     "- FILTERING APPLIED AND DISMISSED COMPANIES: By default, NEVER show or suggest roles or company names that the user has already marked as APPLIED or DISMISSED, unless the user specifically asks for 'all' (e.g. 'show all', 'all companies', 'include dismissed'). `query_jobs` and `get_configured_companies` accept `include_all`: only set `include_all=True` when specifically asked for all companies/jobs.\n\n"
     "DOMAIN KNOWLEDGE FOR COMPENSATION & CTC QUERIES IN INDIA:\n"
     "- When asked about compensation, CTC, or salary thresholds (e.g. 'which role offers CTC over 12 lakhs?'):\n"
@@ -356,6 +359,20 @@ GEMINI_TOOLS = [
                     },
                 },
             },
+            {
+                "name": "search_internet_jobs",
+                "description": "Search the live internet and job boards (Google ATS, Greenhouse, Lever, Ashby, Workday, LinkedIn, Remotive) for real-time tech job openings matching a specific profession, role, tech stack, location, and experience level. ALWAYS invoke when the user asks to find, search, or look for jobs for a particular profession/stack/city on the internet or job boards (e.g. 'find me Java developer roles in Bangalore', 'search for React jobs', 'look for SDE-1 remote jobs', 'find me a job for a frontend developer').",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "query": {"type": "STRING", "description": "The job role, title, or tech stack keyword (e.g. 'Java Developer', 'React Frontend', 'Golang Backend', 'Data Analyst')"},
+                        "location": {"type": "STRING", "description": "Target location or city (e.g. 'Bangalore', 'Hyderabad', 'Pune', 'Gurgaon', 'India', 'Remote'). Defaults to 'India'."},
+                        "experience": {"type": "STRING", "description": "Experience level or YOE (e.g. 'entry-level', '0-1 years', 'fresher', 'intern'). Defaults to 'entry-level'."},
+                        "limit": {"type": "INTEGER", "description": "Maximum number of structured job results to return (default 6)."},
+                    },
+                    "required": ["query"],
+                },
+            },
         ]
     }
 ]
@@ -509,6 +526,23 @@ OPENAI_TOOLS = [
                     "job_id": {"type": "string", "description": "Numeric row ID or unique ID of the job posting (e.g. '1', '42')."},
                     "company": {"type": "string", "description": "Company name if job ID is not specified (e.g. 'Flipkart', 'Amazon')."},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_internet_jobs",
+            "description": "Search the live internet and job boards (Google ATS, Greenhouse, Lever, Ashby, Workday, LinkedIn, Remotive) for real-time tech job openings matching a specific profession, role, tech stack, location, and experience level. ALWAYS invoke when the user asks to find, search, or look for jobs for a particular profession/stack/city on the internet or job boards (e.g. 'find me Java developer roles in Bangalore', 'search for React jobs', 'look for SDE-1 remote jobs', 'find me a job for a frontend developer').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The job role, title, or tech stack keyword (e.g. 'Java Developer', 'React Frontend', 'Golang Backend', 'Data Analyst')"},
+                    "location": {"type": "string", "description": "Target location or city (e.g. 'Bangalore', 'Hyderabad', 'Pune', 'Gurgaon', 'India', 'Remote'). Defaults to 'India'."},
+                    "experience": {"type": "string", "description": "Experience level or YOE (e.g. 'entry-level', '0-1 years', 'fresher', 'intern'). Defaults to 'entry-level'."},
+                    "limit": {"type": "integer", "description": "Maximum number of structured job results to return (default 6)."},
+                },
+                "required": ["query"],
             },
         },
     },
@@ -1081,6 +1115,42 @@ async def execute_tool(
             "message": f"Successfully tailored resume for {job_obj.company} - {job_obj.title}. LaTeX: {tex_path}, PDF: {pdf_path}.",
         }
 
+    if name == "search_internet_jobs":
+        query = str(args.get("query", "")).strip()
+        location = str(args.get("location", "India")).strip()
+        experience = str(args.get("experience", "entry-level")).strip()
+        limit = int(args.get("limit", 6))
+        from gcc_job_radar.internet_search import search_internet_jobs as do_search, format_internet_search_html
+
+        jobs = await do_search(
+            query=query,
+            location=location,
+            experience=experience,
+            limit=limit,
+            record_to_db=True,
+            db_path=db_path,
+        )
+        return {
+            "status": "success",
+            "query": query,
+            "location": location,
+            "count": len(jobs),
+            "jobs": [
+                {
+                    "id": j.numeric_id or j.id,
+                    "company": j.company,
+                    "title": j.title,
+                    "location": j.location,
+                    "apply_url": str(j.apply_url),
+                    "relevance_score": j.relevance_score,
+                    "matched_reasons": j.matched_reasons,
+                    "why": j.why,
+                }
+                for j in jobs
+            ],
+            "html": format_internet_search_html(query, location, jobs),
+        }
+
     return {"status": "error", "message": f"Unknown tool '{name}'"}
 
 
@@ -1203,6 +1273,9 @@ def format_tool_result_summary(name: str, result: dict[str, Any]) -> str:
                 f"<i>Your resume has been tailored and saved to the <code>tailored/</code> workspace directory.</i>"
             )
         return f"⚠️ {html.escape(str(result.get('message', 'Could not tailor resume.')))}"
+
+    if name == "search_internet_jobs":
+        return result.get("html") or "No matching jobs found on the internet."
 
     if "jobs" in result:
         return format_jobs_html(result["jobs"], f"Results for {name}")

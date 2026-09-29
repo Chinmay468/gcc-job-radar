@@ -362,6 +362,7 @@ def test_cross_platform_duplicate_preserves_applied_status(tmp_path: Path) -> No
 
 def test_application_dates_persistence_and_prune_expired(tmp_path: Path) -> None:
     """Verify application start and end dates are persisted, and prune_expired_jobs marks past deadlines as EXPIRED."""
+    from datetime import datetime, timedelta
     from gcc_job_radar.db import (
         filter_new_jobs,
         filter_unalerted_jobs,
@@ -375,19 +376,12 @@ def test_application_dates_persistence_and_prune_expired(tmp_path: Path) -> None
     db_file = tmp_path / "test_dates_prune.db"
     init_db(db_file)
 
-    # 1. Job with active future deadline
-    active_job = JobPosting(
-        id="job_active_1",
-        company="Snowflake",
-        title="Associate Software Engineer",
-        location="Bengaluru",
-        apply_url="https://jobs.ashbyhq.com/snowflake/1",
-        provider=ATSProvider.ASHBY,
-        published_date="2026-09-01",
-        application_start_date="2026-09-01",
-        application_end_date="2026-10-15",
-        status="NEW",
-    )
+    today = datetime.now().date()
+    today_str = today.isoformat()
+    far_future = (today + timedelta(days=20)).isoformat()
+    near_future = (today + timedelta(days=2)).isoformat()
+    past_date = (today - timedelta(days=10)).isoformat()
+    prune_ref = (today + timedelta(days=5)).isoformat()
 
     # 1. Job with active future deadline
     active_job = JobPosting(
@@ -397,13 +391,13 @@ def test_application_dates_persistence_and_prune_expired(tmp_path: Path) -> None
         location="Bengaluru",
         apply_url="https://jobs.ashbyhq.com/snowflake/1",
         provider=ATSProvider.ASHBY,
-        published_date="2026-09-01",
-        application_start_date="2026-09-01",
-        application_end_date="2026-10-15",
+        published_date=today_str,
+        application_start_date=today_str,
+        application_end_date=far_future,
         status="NEW",
     )
 
-    # 2. Job with deadline in near future (active now, but will expire by Oct 1)
+    # 2. Job with deadline in near future (active now, but will expire by prune_ref)
     expiring_job = JobPosting(
         id="job_expiring_2",
         company="OldCo",
@@ -411,9 +405,9 @@ def test_application_dates_persistence_and_prune_expired(tmp_path: Path) -> None
         location="Pune",
         apply_url="https://boards.greenhouse.io/oldco/2",
         provider=ATSProvider.GREENHOUSE,
-        published_date="2026-08-01",
-        application_start_date="2026-08-01",
-        application_end_date="2026-09-25",
+        published_date=today_str,
+        application_start_date=today_str,
+        application_end_date=near_future,
         status="NEW",
     )
 
@@ -425,9 +419,9 @@ def test_application_dates_persistence_and_prune_expired(tmp_path: Path) -> None
         location="Bengaluru",
         apply_url="https://jobs.lever.co/appliedco/3",
         provider=ATSProvider.LEVER,
-        published_date="2026-08-01",
-        application_start_date="2026-08-01",
-        application_end_date="2026-09-25",
+        published_date=today_str,
+        application_start_date=today_str,
+        application_end_date=near_future,
         status="APPLIED",
     )
 
@@ -439,9 +433,9 @@ def test_application_dates_persistence_and_prune_expired(tmp_path: Path) -> None
         location="Remote",
         apply_url="https://jobs.lever.co/pastco/4",
         provider=ATSProvider.LEVER,
-        published_date="2026-08-01",
-        application_start_date="2026-08-01",
-        application_end_date="2026-09-05",
+        published_date=past_date,
+        application_start_date=past_date,
+        application_end_date=past_date,
         status="NEW",
     )
 
@@ -451,8 +445,8 @@ def test_application_dates_persistence_and_prune_expired(tmp_path: Path) -> None
     all_jobs = get_latest_jobs(status="ALL", db_path=db_file)
     assert len(all_jobs) == 4
     active_record = next(j for j in all_jobs if j["company"] == "Snowflake")
-    assert active_record["application_start_date"] == "2026-09-01"
-    assert active_record["application_end_date"] == "2026-10-15"
+    assert active_record["application_start_date"] == today_str
+    assert active_record["application_end_date"] == far_future
     assert active_record["status"] == "NEW"
     assert active_record["is_active"] == 1
 
@@ -468,8 +462,8 @@ def test_application_dates_persistence_and_prune_expired(tmp_path: Path) -> None
     assert applied_record["status"] == "APPLIED"
     assert applied_record["is_active"] == 1
 
-    # Fast forward time to Oct 1: prune_expired_jobs should expire expiring_job and deactivate applied_expiring_job
-    pruned_count = prune_expired_jobs(db_path=db_file, ref_date="2026-10-01")
+    # Fast forward time to prune_ref: prune_expired_jobs should expire expiring_job and deactivate applied_expiring_job
+    pruned_count = prune_expired_jobs(db_path=db_file, ref_date=prune_ref)
     assert pruned_count == 2  # OldCo + AppliedCo
 
     # Check statuses after pruning

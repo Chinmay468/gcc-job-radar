@@ -985,9 +985,10 @@ async def test_sync_telegram_bot_commands() -> None:
         assert ok is True
         assert captured_payload is not None
         cmds = captured_payload.get("commands", [])
-        assert len(cmds) == 10
+        assert len(cmds) == 11
         cmd_names = [c["command"] for c in cmds]
         assert "scan" in cmd_names
+        assert "search" in cmd_names
         assert "latest" in cmd_names
         assert "email" in cmd_names
         assert "accio" in cmd_names
@@ -1077,6 +1078,76 @@ async def test_concurrent_update_dispatching() -> None:
     assert "ai_replied" in order_of_events
     # The fast /help command should complete before the slow AI query finishes
     assert order_of_events.index("help_replied") < order_of_events.index("ai_end")
+
+
+@pytest.mark.asyncio
+async def test_handle_command_search() -> None:
+    """Verify /search command parses queries and returns structured HTML job cards."""
+    from gcc_job_radar.bot_listener import handle_command
+    from gcc_job_radar.models import ATSProvider, JobPosting
+
+    captured_replies = []
+
+    def mock_handler(request: httpx.Request) -> httpx.Response:
+        if "sendMessage" in str(request.url):
+            payload = json.loads(request.content.decode("utf-8"))
+            captured_replies.append(payload)
+            return httpx.Response(200, json={"ok": True, "result": True})
+        return httpx.Response(200, json={"ok": True})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(mock_handler)) as client:
+        # 1. Test empty query -> returns usage
+        await handle_command(
+            command_text="/search",
+            chat_id="123456",
+            bot_token="test_token",
+            allowed_chat_id="123456",
+            client=client,
+        )
+        assert len(captured_replies) == 1
+        assert "Usage:" in captured_replies[0]["text"]
+        captured_replies.clear()
+
+        # 2. Test query with location
+        fake_job = JobPosting(
+            id="job_search_1",
+            numeric_id=999,
+            company="Acme Corp",
+            title="Junior Java Developer",
+            location="Bengaluru",
+            apply_url="https://jobs.ashbyhq.com/acme/1",
+            provider=ATSProvider.INTERNET_SEARCH,
+            relevance_score=85,
+            why="Strong match for Java/Spring Boot stack",
+        )
+
+        with patch("gcc_job_radar.internet_search.search_internet_jobs", new_callable=AsyncMock) as mock_search:
+            mock_search.return_value = [fake_job]
+            await handle_command(
+                command_text="/search Java Developer in Bangalore",
+                chat_id="123456",
+                bot_token="test_token",
+                allowed_chat_id="123456",
+                client=client,
+            )
+
+            mock_search.assert_awaited_once_with(
+                query="Java Developer",
+                location="Bangalore",
+                limit=8,
+                db_path=None,
+            )
+            # Should receive searching notification + results card with inline keyboard
+            assert len(captured_replies) == 2
+            results_msg = captured_replies[1]
+            assert "Acme Corp" in results_msg["text"]
+            assert "#999" in results_msg["text"]
+            assert "reply_markup" in results_msg
+            kb = results_msg["reply_markup"]["inline_keyboard"]
+            assert len(kb) == 1
+            assert kb[0][0]["text"] == "Apply #1 (Acme Corp)"
+            assert kb[0][1]["text"] == "Dismiss #1"
+
 
 
 

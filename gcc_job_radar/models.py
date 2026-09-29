@@ -21,6 +21,7 @@ class ATSProvider(str, Enum):
     MICROSOFT = "microsoft"
     APPLE = "apple"
     EA = "ea"
+    INTERNET_SEARCH = "internet_search"
     CUSTOM = "custom"
 
 

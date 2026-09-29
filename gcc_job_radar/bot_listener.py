@@ -68,6 +68,7 @@ _last_scan_label: str = ""
 
 DEFAULT_MENU_COMMANDS: list[dict[str, str]] = [
     {"command": "scan", "description": "Scan GCCs (/scan, /scan new, /scan <co>)"},
+    {"command": "search", "description": "Search internet & job boards (/search <profession>)"},
     {"command": "latest", "description": "View 5 latest verified openings"},
     {"command": "email", "description": "Sync 3 email accounts for job alerts"},
     {"command": "accio", "description": "Scan AccioJob portal & hiring drives"},
@@ -256,6 +257,7 @@ async def handle_command(
             "📋 <b>GCC Radar — Bot Commands Menu</b>\n\n"
             "⚡ <b>Core Actions (In [/] Menu):</b>\n"
             "• <code>/scan</code> — Scan active GCCs for entry-level roles (or <code>/scan all</code>)\n"
+            "• <code>/search &lt;role&gt; [in &lt;location&gt;]</code> — Search internet, ATS boards &amp; LinkedIn live\n"
             "• <code>/latest</code> — View 5 latest verified openings with quick buttons\n"
             "• <code>/email</code> — Sync 3 email accounts for job alerts (LinkedIn, Naukri, AccioJob)\n"
             "• <code>/acciojob</code> — Scan AccioJob portal &amp; hiring drives (or <code>/accio</code>)\n"
@@ -273,7 +275,7 @@ async def handle_command(
             "• <code>/restore &lt;id(s)/company&gt;</code> — Restore job(s) back to NEW\n"
             "• <code>/clear</code> — Clear AI conversation memory\n"
             "• <code>/list</code> — Show this commands menu\n\n"
-            "💬 <i>You can also ask questions in plain English to chat with the AI assistant!</i>"
+            "💬 <i>You can also ask questions in plain English or ask the AI to find jobs for you!</i>"
         )
         await send_telegram_reply(bot_token, chat_id, help_text, client)
 
@@ -424,6 +426,93 @@ async def handle_command(
         record_jobs(jobs, db_path)
         reply = format_jobs_html(jobs, f"Results for {matched_companies[0].name}")
         await send_telegram_reply(bot_token, chat_id, reply, client)
+
+    elif cmd in ("/search", "/find"):
+        if not arg:
+            usage_msg = (
+                "⚠️ <b>Usage:</b> <code>/search &lt;profession/role&gt; [in &lt;location&gt;]</code>\n\n"
+                "<b>Examples:</b>\n"
+                "• <code>/search Java Developer in Bangalore</code>\n"
+                "• <code>/search Backend Engineer Remote</code>\n"
+                "• <code>/search Spring Boot Developer</code>\n"
+                "• <code>/search SDE 1 India</code>\n\n"
+                "<i>Searches live ATS endpoints (Greenhouse, Lever, Ashby, Workday), LinkedIn, and tech feeds on-demand with match scoring!</i>"
+            )
+            await send_telegram_reply(bot_token, chat_id, usage_msg, client)
+            return
+
+        raw_query = arg.strip()
+        loc = "India"
+        m_loc = re.search(r"\b(?:in|at|near)\s+([A-Za-z\s]+)$", raw_query, re.IGNORECASE)
+        if m_loc:
+            loc = m_loc.group(1).strip()
+            clean_q = raw_query[:m_loc.start()].strip()
+        elif "remote" in raw_query.lower():
+            loc = "Remote"
+            clean_q = raw_query
+        else:
+            clean_q = raw_query
+
+        if not clean_q:
+            clean_q = raw_query
+
+        await send_telegram_reply(
+            bot_token,
+            chat_id,
+            f"🌐 <i>Searching live internet, ATS boards (Greenhouse, Lever, Ashby, Workday) and LinkedIn for <b>{html.escape(clean_q)}</b> in <b>{html.escape(loc)}</b>...</i>",
+            client,
+        )
+
+        stop_typing = asyncio.Event()
+        typing_task = asyncio.create_task(
+            _keep_typing_action(bot_token, chat_id, client, stop_typing)
+        )
+        try:
+            from gcc_job_radar.internet_search import (
+                format_internet_search_html,
+                search_internet_jobs,
+            )
+
+            found_jobs = await search_internet_jobs(
+                query=clean_q,
+                location=loc,
+                limit=8,
+                db_path=db_path,
+            )
+            reply = format_internet_search_html(clean_q, loc, found_jobs)
+
+            if found_jobs:
+                keyboard = []
+                for idx, rj in enumerate(found_jobs[:4], start=1):
+                    jid = rj.numeric_id or rj.id
+                    eff_url, _, _ = resolve_effective_apply_url(rj)
+                    comp = (rj.company or "")[:12]
+                    keyboard.append([
+                        {"text": f"Apply #{idx} ({comp})", "url": str(eff_url)},
+                        {"text": f"Dismiss #{idx}", "callback_data": f"dismiss:{jid}"},
+                        {"text": f"Applied #{idx}", "callback_data": f"applied:{jid}"},
+                    ])
+                await send_telegram_reply(
+                    bot_token,
+                    chat_id,
+                    reply,
+                    client,
+                    reply_markup={"inline_keyboard": keyboard},
+                )
+            else:
+                await send_telegram_reply(bot_token, chat_id, reply, client)
+        except Exception as exc:
+            logger.exception("Error searching internet jobs")
+            clean_err = re.sub(r"\[/?(bold|dim|cyan|red)[^\]]*\]", "", str(exc))
+            reply = f"❌ Error performing internet job search: {html.escape(clean_err)}"
+            await send_telegram_reply(bot_token, chat_id, reply, client)
+        finally:
+            stop_typing.set()
+            typing_task.cancel()
+            try:
+                await typing_task
+            except (asyncio.CancelledError, Exception):
+                pass
 
     elif cmd == "/scan":
         global _is_scanning, _last_scan_timestamp, _last_scan_scope, _last_scan_label
