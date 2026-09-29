@@ -69,7 +69,13 @@
         <button id="btn-tailor" class="btn btn-primary">
           <span class="btn-icon">📄</span> Tailor & Compile PDF
         </button>
+        <button id="btn-dismiss-main" class="btn btn-danger-outline" title="Dismiss this job & company from radar">
+          <span class="btn-icon">🗑️</span> Dismiss
+        </button>
       </div>
+
+      <!-- Dismiss Notification Banner -->
+      <div id="dismiss-banner" class="dismiss-banner hidden"></div>
     </section>
 
     <!-- Progress / Loading Indicator -->
@@ -81,8 +87,13 @@
     <!-- Evaluation Results Card -->
     <section id="eval-card" class="card hidden">
       <div class="card-header">
-        <span class="card-title">Fit Evaluation</span>
-        <span id="verdict-badge" class="verdict-badge">APPLY</span>
+        <div class="eval-header-title">
+          <span class="card-title">Fit Evaluation</span>
+          <span id="verdict-badge" class="verdict-badge">APPLY</span>
+        </div>
+        <div class="card-header-actions">
+          <button id="btn-dismiss-eval" class="btn-text btn-dismiss-link" title="Dismiss this job/company from future radar alerts">🗑️ Dismiss Job</button>
+        </div>
       </div>
 
       <div class="score-display">

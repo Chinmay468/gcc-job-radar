@@ -56,6 +56,8 @@ from gcc_job_radar.db import (
     get_db_path,
     get_stats,
     mark_job_status,
+    dismiss_selectors_or_companies,
+    save_dismissal_to_registry,
 )
 
 load_dotenv_if_present()
@@ -145,6 +147,8 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.handle_refine()
         elif path == "/record_job":
             self.handle_record_job()
+        elif path == "/dismiss":
+            self.handle_dismiss()
         else:
             self._send_json(404, {"error": "Not Found", "path": path})
 
@@ -486,6 +490,68 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(500, {"error": str(e)})
         finally:
             conn.close()
+
+    def handle_dismiss(self):
+        """Dismisses a job / company and registers suppression in Radar database and dismissals registry."""
+        body = self._read_json_body()
+        company = body.get("company", "").strip()
+        title = body.get("title", "").strip() or "All Roles"
+        apply_url = body.get("url", "").strip()
+        reason = body.get("reason", "").strip() or "Dismissed via Chrome Extension"
+        score = body.get("score", 0)
+
+        if not company:
+            self._send_json(400, {"error": "Company name is required to dismiss."})
+            return
+
+        db_path = get_db_path()
+        init_db(db_path)
+
+        try:
+            # 1. Register suppression across DB & dismissals registry (dismissals.json & dismissed_companies)
+            dismiss_res = dismiss_selectors_or_companies(selector=company, notes=reason, db_path=db_path)
+
+            # 2. Also ensure this specific job ID / entry is explicitly marked DISMISSED in seen_jobs
+            job_id = f"chrome_{re.sub(r'[^a-zA-Z0-9]', '_', company.lower())}_{re.sub(r'[^a-zA-Z0-9]', '_', title.lower())[:30]}"
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            try:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO seen_jobs (
+                        id, company, title, location, apply_url, provider, status, notes, relevance_score, is_active
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    ON CONFLICT(id) DO UPDATE SET
+                        status = 'DISMISSED',
+                        is_active = 0,
+                        notes = excluded.notes,
+                        last_seen_at = CURRENT_TIMESTAMP
+                """, (
+                    job_id, company, title, "India/Remote", apply_url, "chrome_ext",
+                    "DISMISSED", f"Dismissed via Chrome Extension: {reason}", score
+                ))
+                conn.commit()
+            finally:
+                conn.close()
+
+            # 3. Explicitly persist to dismissals registry for url/job as well
+            save_dismissal_to_registry(
+                job_dict={"company": company, "title": title, "apply_url": apply_url, "id": job_id},
+                company_name=company,
+                db_path=db_path,
+            )
+
+            logger.info(f"Dismissed job/company '{company}' - '{title}': {dismiss_res}")
+            self._send_json(200, {
+                "success": True,
+                "company": company,
+                "title": title,
+                "status": "DISMISSED",
+                "details": dismiss_res,
+            })
+        except Exception as e:
+            logger.error(f"Failed to dismiss job: {e}", exc_info=True)
+            self._send_json(500, {"error": str(e)})
 
 
 class ReusableTCPServer(socketserver.TCPServer):

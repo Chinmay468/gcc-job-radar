@@ -18,6 +18,7 @@ const btnReextract = document.getElementById("btn-reextract");
 
 const btnEvaluate = document.getElementById("btn-evaluate");
 const btnTailor = document.getElementById("btn-tailor");
+const btnDismissMain = document.getElementById("btn-dismiss-main");
 
 const loadingCard = document.getElementById("loading-card");
 const loadingText = document.getElementById("loading-text");
@@ -25,6 +26,8 @@ const loadingText = document.getElementById("loading-text");
 // Eval card elements
 const evalCard = document.getElementById("eval-card");
 const verdictBadge = document.getElementById("verdict-badge");
+const btnDismissEval = document.getElementById("btn-dismiss-eval");
+const dismissBanner = document.getElementById("dismiss-banner");
 const scoreVal = document.getElementById("score-val");
 const oneLineReason = document.getElementById("one-line-reason");
 const applyAction = document.getElementById("apply-action");
@@ -79,6 +82,8 @@ function setupEventListeners() {
   btnReextract.addEventListener("click", loadJobFromActiveTab);
   btnEvaluate.addEventListener("click", handleEvaluate);
   btnTailor.addEventListener("click", handleTailor);
+  if (btnDismissMain) btnDismissMain.addEventListener("click", handleDismissJob);
+  if (btnDismissEval) btnDismissEval.addEventListener("click", handleDismissJob);
   btnRefine.addEventListener("click", handleRefine);
   btnConfirmDownload.addEventListener("click", handleDownloadResume);
   btnViewDiff.addEventListener("click", () => {
@@ -520,6 +525,93 @@ async function handleMarkApplied() {
     }, 2000);
   } catch (err) {
     alert(`Failed to record application: ${err.message}`);
+  }
+}
+
+// 8. Handle Dismiss Job & Company from Radar
+async function handleDismissJob() {
+  const company = inputCompany.value.trim();
+  const title = inputTitle.value.trim() || "All Roles";
+
+  if (!company) {
+    alert("Please enter or extract the company name before dismissing.");
+    return;
+  }
+
+  const confirmMsg = `Are you sure you want to dismiss "${company}"?\nThis will suppress alerts for this company across Telegram, scans, and daily digests.`;
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  const originalMainText = btnDismissMain ? btnDismissMain.innerHTML : "";
+  const originalEvalText = btnDismissEval ? btnDismissEval.innerHTML : "";
+
+  if (btnDismissMain) {
+    btnDismissMain.disabled = true;
+    btnDismissMain.innerHTML = `<span>⏳ Dismissing...</span>`;
+  }
+  if (btnDismissEval) {
+    btnDismissEval.disabled = true;
+    btnDismissEval.innerHTML = `⏳ Dismissing...`;
+  }
+
+  try {
+    const reason = (currentEvaluation && currentEvaluation.one_line_reason)
+      ? currentEvaluation.one_line_reason
+      : "Dismissed by user via Chrome Extension";
+
+    const res = await fetch(`${BRIDGE_URL}/dismiss`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        company: company,
+        title: title,
+        url: currentActiveUrl,
+        reason: reason,
+        score: currentEvaluation ? currentEvaluation.score : 0,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // Visual feedback
+    if (verdictBadge) {
+      verdictBadge.textContent = "DISMISSED";
+      verdictBadge.className = "verdict-badge verdict-dismissed";
+    }
+
+    if (dismissBanner) {
+      dismissBanner.innerHTML = `<span>🗑️</span><span><strong>${company}</strong> dismissed and suppressed from future radar scans & alerts.</span>`;
+      dismissBanner.classList.remove("hidden");
+    }
+
+    if (btnDismissMain) {
+      btnDismissMain.innerHTML = `<span class="btn-icon">✅</span> Dismissed`;
+      btnDismissMain.classList.add("btn-disabled");
+    }
+    if (btnDismissEval) {
+      btnDismissEval.innerHTML = `✅ Dismissed`;
+      btnDismissEval.disabled = true;
+    }
+
+    // Refresh bridge stats in footer
+    await checkBridgeHealth();
+
+  } catch (err) {
+    alert(`Failed to dismiss job: ${err.message}\nMake sure the local bridge is running.`);
+    if (btnDismissMain) {
+      btnDismissMain.disabled = false;
+      btnDismissMain.innerHTML = originalMainText;
+    }
+    if (btnDismissEval) {
+      btnDismissEval.disabled = false;
+      btnDismissEval.innerHTML = originalEvalText;
+    }
   }
 }
 

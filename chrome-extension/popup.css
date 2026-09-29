@@ -305,6 +305,32 @@ input[type="text"]:focus, textarea:focus {
   border-color: var(--text-muted);
 }
 
+.btn-danger-outline {
+  background: transparent;
+  border: 1px solid rgba(244, 63, 94, 0.45);
+  color: #fb7185;
+}
+.btn-danger-outline:hover {
+  background-color: rgba(244, 63, 94, 0.15);
+  border-color: #f43f5e;
+  color: #fda4af;
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #e11d48, #f43f5e);
+  color: #ffffff;
+}
+.btn-danger:hover {
+  background: linear-gradient(135deg, #be123c, #e11d48);
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.35);
+}
+
+.btn:disabled, .btn-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .btn-text {
   background: transparent;
   border: none;
@@ -393,6 +419,12 @@ input[type="text"]:focus, textarea:focus {
 }
 
 /* Verdict Badges */
+.eval-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .verdict-badge {
   font-size: 11px;
   font-weight: 700;
@@ -417,6 +449,45 @@ input[type="text"]:focus, textarea:focus {
   background-color: rgba(244, 63, 94, 0.15);
   color: #fb7185;
   border: 1px solid rgba(244, 63, 94, 0.4);
+}
+
+.verdict-dismissed {
+  background-color: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+}
+
+.btn-dismiss-link {
+  color: #fb7185 !important;
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-dismiss-link:hover {
+  color: #fda4af !important;
+  text-decoration: underline;
+}
+
+.dismiss-banner {
+  background-color: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: #fecdd3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.4;
+  margin-top: 6px;
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Skill pills */

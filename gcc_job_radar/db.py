@@ -1512,17 +1512,18 @@ def record_manual_job(
         )
         existing = cursor.fetchone()
 
+        is_active_val = 0 if status_norm in ("DISMISSED", "REJECTED", "EXPIRED") else 1
         if existing:
             target_rowid = existing["numeric_id"]
             if status_norm == "APPLIED":
                 cursor.execute(
-                    f"UPDATE {table_name} SET status = ?, applied_at = COALESCE(applied_at, ?), notes = COALESCE(?, notes), last_seen_at = CURRENT_TIMESTAMP WHERE rowid = ?",
-                    (status_norm, now_iso, notes, target_rowid),
+                    f"UPDATE {table_name} SET status = ?, applied_at = COALESCE(applied_at, ?), notes = COALESCE(?, notes), is_active = ?, last_seen_at = CURRENT_TIMESTAMP WHERE rowid = ?",
+                    (status_norm, now_iso, notes, is_active_val, target_rowid),
                 )
             else:
                 cursor.execute(
-                    f"UPDATE {table_name} SET status = ?, notes = COALESCE(?, notes), last_seen_at = CURRENT_TIMESTAMP WHERE rowid = ?",
-                    (status_norm, notes, target_rowid),
+                    f"UPDATE {table_name} SET status = ?, notes = COALESCE(?, notes), is_active = ?, last_seen_at = CURRENT_TIMESTAMP WHERE rowid = ?",
+                    (status_norm, notes, is_active_val, target_rowid),
                 )
             conn.commit()
             cursor.execute(f"SELECT rowid AS numeric_id, * FROM {table_name} WHERE rowid = ?", (target_rowid,))
@@ -1542,13 +1543,13 @@ def record_manual_job(
             target_rowid = existing_comp["numeric_id"]
             if status_norm == "APPLIED":
                 cursor.execute(
-                    f"UPDATE {table_name} SET status = ?, applied_at = COALESCE(applied_at, ?), notes = COALESCE(?, notes), last_seen_at = CURRENT_TIMESTAMP WHERE rowid = ?",
-                    (status_norm, now_iso, notes, target_rowid),
+                    f"UPDATE {table_name} SET status = ?, applied_at = COALESCE(applied_at, ?), notes = COALESCE(?, notes), is_active = ?, last_seen_at = CURRENT_TIMESTAMP WHERE rowid = ?",
+                    (status_norm, now_iso, notes, is_active_val, target_rowid),
                 )
             else:
                 cursor.execute(
-                    f"UPDATE {table_name} SET status = ?, notes = COALESCE(?, notes), last_seen_at = CURRENT_TIMESTAMP WHERE rowid = ?",
-                    (status_norm, notes, target_rowid),
+                    f"UPDATE {table_name} SET status = ?, notes = COALESCE(?, notes), is_active = ?, last_seen_at = CURRENT_TIMESTAMP WHERE rowid = ?",
+                    (status_norm, notes, is_active_val, target_rowid),
                 )
             conn.commit()
             cursor.execute(f"SELECT rowid AS numeric_id, * FROM {table_name} WHERE rowid = ?", (target_rowid,))
@@ -1562,7 +1563,7 @@ def record_manual_job(
                 is_active, is_remote, status, applied_at, notes, direct_search_url,
                 relevance_score, first_seen_at, last_seen_at
             )
-            VALUES (?, ?, ?, ?, ?, 'custom', 'Recent', 1, ?, ?, ?, ?, ?, 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, 'custom', 'Recent', ?, ?, ?, ?, ?, ?, 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """,
             (
                 manual_id,
@@ -1570,6 +1571,7 @@ def record_manual_job(
                 tit,
                 loc,
                 clean_url,
+                is_active_val,
                 1 if "remote" in loc.lower() else 0,
                 status_norm,
                 applied_at,
