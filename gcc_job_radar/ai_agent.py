@@ -66,8 +66,12 @@ SYSTEM_PROMPT = (
     "- The user has 3 active email accounts configured in .env with authorized IMAP SSL credentials (chinmay8064@gmail.com, chinmaymaheshwari.it27@gmail.com, chinmaymaheshwari.it27@jecrc.ac.in).\n"
     "- When the user asks to check, scan, go through, or sync their email accounts / inbox for jobs, job alerts, or emails (e.g. 'Go through all 3 email accounts for new relevant jobs', 'check my emails for jobs', 'scan inbox for job alerts', 'sync emails'), ALWAYS invoke the `sync_email_jobs` tool immediately.\n"
     "- NEVER say 'I am not able to access your email accounts directly' or 'I don't have access to your email'. You DO have direct access via `sync_email_jobs`.\n\n"
-    "- ONLY invoke tools (`check_company_live`, `query_jobs`, `sync_email_jobs`, `scan_acciojob_portal`, `get_applied_jobs`, `get_dismissed_jobs`, `manage_job_status`) when searching for job openings or checking company/email status. NEVER invoke them for compensation, CTC, salary inquiries, interview advice, resume tips, or general role comparisons. ATS endpoints do NOT contain Indian CTC/compensation figures.\n"
-    "- Invoke `query_jobs` when the user is searching for open job listings in the database by title, keyword, city, or company name (e.g. 'BlackRock', 'Flipkart', 'find python roles in Bangalore'). If `query_jobs` returns 0 jobs for a requested company or if the user asks to scan, check, or refresh active openings at a specific company (e.g. 'check Databricks live', 'scan Celonis', 'add/check BlackRock', 'check Flipkart'), invoke `check_company_live` to fetch live openings directly from the company's verified ATS board.\n"
+    "- ONLY invoke tools (`check_company_live`, `query_jobs`, `search_internet_jobs`, `sync_email_jobs`, `scan_acciojob_portal`, `get_applied_jobs`, `get_dismissed_jobs`, `manage_job_status`) when searching for job openings or checking company/email status. NEVER invoke them for compensation, CTC, salary inquiries, interview advice, resume tips, or general role comparisons. ATS endpoints do NOT contain Indian CTC/compensation figures.\n"
+    "- DISCOVERY & FINDING JOBS VS DATABASE QUERY:\n"
+    "  • ALWAYS invoke `search_internet_jobs` when the user asks to find, search, or look for ANY job role, profession, domain, tech stack, or location (e.g. 'find me a vibe coder job for a fresher', 'find Java roles in Bangalore', 'search for React jobs', 'find frontend internships').\n"
+    "  • Modern Role Aliases ('vibe coder', 'AI coder', 'AI-assisted engineer'): Vibe coding refers to building applications using AI tools (Cursor, Claude, Copilot, ChatGPT). Pass `query='vibe coder'` or `query='AI Engineer'` to `search_internet_jobs`. NEVER dump random unrelated jobs!\n"
+    "  • Invoke `query_jobs` ONLY when the user explicitly asks to view already stored/tracked jobs in their local database (e.g. 'show jobs in my database', 'what roles are currently tracked', 'list new jobs in database'). NEVER use `query_jobs` for broad role discovery.\n"
+    "  • ZERO RESULTS / STRICT QUERY INTEGRITY: If `query_jobs` or `search_internet_jobs` returns NO jobs matching the user's specific request (e.g. no 'vibe coder' roles), NEVER fall back to listing random unrelated senior or .NET jobs! State honestly and clearly that no direct postings for that specific role were found, and explain what adjacent entry-level roles (e.g. Full Stack Developer, Junior AI Engineer) they can explore.\n"
     "- Use `get_applied_jobs` whenever the user asks for their applied jobs, application history, applied sheet, applied list, or asks 'where are the rest of my applications'. ALWAYS invoke `get_applied_jobs` to retrieve the authentic list of applied jobs from the database instead of guessing from recent chat context.\n"
     "- Use `get_dismissed_jobs` whenever the user asks for dismissed jobs, dismissed companies, hidden jobs, 'name of all', 'names of all companies', 'list all dismissed', or asks which companies/roles have been dismissed. ALWAYS invoke `get_dismissed_jobs` to retrieve the comprehensive list of ALL dismissed companies and total count from the database instead of guessing or listing only 4-5 from recent chat context.\n"
     "- Use `manage_job_status` when the user asks to dismiss, hide, apply, mark as applied, or restore/undismiss jobs by ID number (e.g. 'dismiss job 1 and 4') or company name (e.g. 'dismiss Devmani Traders', 'mark BT Group as applied', 'restore job 2', 'applied to uipath, celonis', 'dismiss wysa, katalystcs, tvaram, WSP, betterworks'). Dismissing companies by name permanently suppresses them from future scans, email alerts, and daily digests, even if they have no currently active listings in the local database.\n"
@@ -75,9 +79,6 @@ SYSTEM_PROMPT = (
     "- Use `sync_email_jobs` ONLY when the user explicitly asks to scan, check, go through, or ingest job alert emails (e.g. 'check my email', 'scan inbox', 'sync email alerts') from their configured email accounts.\n"
     "- FOR GENERAL STATUS OR UPDATE QUERIES (e.g. 'Any new update', 'Any updates?', 'What\\'s new?', 'Show new openings'): ALWAYS invoke `query_jobs(status='NEW', limit=5)` to retrieve the latest open listings from the tracker database. DO NOT invoke `sync_email_jobs` unless emails/inboxes are specifically requested.\n"
     "- Use `scan_acciojob_portal` whenever the user asks to check, scan, or fetch fresh early-career tech jobs and hiring drives from the AccioJob portal.\n"
-    "- LIVE INTERNET & JOB BOARD SEARCH:\n"
-    "  • When the user asks to find, search, or look for jobs for a particular profession, role, domain, tech stack, or location on the internet or across job boards (e.g. 'find me Java developer roles in Bangalore', 'search for React jobs', 'look for SDE-1 remote jobs', 'find me a job for a frontend developer', 'search the web for junior backend jobs'): ALWAYS invoke the `search_internet_jobs` tool immediately.\n"
-    "  • Extract the profession/role as `query` (e.g. 'Java Developer', 'React Frontend'), location (e.g. 'Bangalore', 'Remote', 'India'), and experience level (e.g. 'entry-level', '0-1 years').\n"
     "- NEVER mention internal function or tool names (such as `manage_job_status`, `query_jobs`, `get_applied_jobs`, `sync_email_jobs`, `search_internet_jobs`, `execute_tool`) to the user. Always advise the user using standard user-facing commands (e.g. `/search <profession>`, `/apply <id>`, `/applied`, `/dismiss <id>`, `/scan`, `/sync`).\n"
     "- FILTERING APPLIED AND DISMISSED COMPANIES: By default, NEVER show or suggest roles or company names that the user has already marked as APPLIED or DISMISSED, unless the user specifically asks for 'all' (e.g. 'show all', 'all companies', 'include dismissed'). `query_jobs` and `get_configured_companies` accept `include_all`: only set `include_all=True` when specifically asked for all companies/jobs.\n\n"
     "DOMAIN KNOWLEDGE FOR COMPENSATION & CTC QUERIES IN INDIA:\n"
@@ -243,7 +244,7 @@ GEMINI_TOOLS = [
         "function_declarations": [
             {
                 "name": "query_jobs",
-                "description": "Query the database of verified entry-level GCC tech jobs in India by title keyword, location, company, or status. ONLY use when searching for job postings. NEVER use for salary, CTC, or general questions.",
+                "description": "Query EXISTING jobs already tracked and stored in the local SQLite database. ONLY use when user explicitly asks for stored/tracked jobs or asks 'what jobs are in my tracker' or 'show stored jobs'. DO NOT use when user asks to find or search for roles/professions/stacks (use search_internet_jobs instead).",
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {
@@ -382,7 +383,7 @@ OPENAI_TOOLS = [
         "type": "function",
         "function": {
             "name": "query_jobs",
-            "description": "Query the database of verified entry-level GCC tech jobs in India by title keyword, location, company, or status. ONLY use when searching for job postings. NEVER use for salary, CTC, or general questions.",
+            "description": "Query EXISTING jobs already tracked and stored in the local SQLite database. ONLY use when user explicitly asks for stored/tracked jobs or asks 'what jobs are in my tracker' or 'show stored jobs'. DO NOT use when user asks to find or search for roles/professions/stacks (use search_internet_jobs instead).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1278,7 +1279,15 @@ def format_tool_result_summary(name: str, result: dict[str, Any]) -> str:
         return result.get("html") or "No matching jobs found on the internet."
 
     if "jobs" in result:
-        return format_jobs_html(result["jobs"], f"Results for {name}")
+        jobs = result["jobs"]
+        if not jobs:
+            kw = result.get("keyword") or result.get("title_keyword") or "your criteria"
+            return (
+                f"ℹ️ <b>No roles found matching '{html.escape(str(kw))}'</b> in your local database.\n\n"
+                f"💡 <i>Tip: Try searching live ATS job boards using <code>/search {html.escape(str(kw))}</code>!</i>"
+            )
+        title_hdr = "Matching Tracked Openings" if name == "query_jobs" else f"Results for {name}"
+        return format_jobs_html(jobs, title_hdr)
     if "companies" in result:
         total = result.get("total_count", len(result.get("companies", [])))
         custom = result.get("custom_career_scrapers", [])

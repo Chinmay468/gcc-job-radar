@@ -206,7 +206,18 @@ def evaluate_job_relevance(
 
     else:
         # Score < 20
-        if is_stale:
+        from gcc_job_radar.config import EXCLUDE_TITLE_PATTERN
+        from gcc_job_radar.filters import _MTS_MASK_PATTERN, requires_experienced_candidate
+
+        sanitized_t = _MTS_MASK_PATTERN.sub("mts_role", title)
+        is_senior = bool(EXCLUDE_TITLE_PATTERN.search(sanitized_t))
+        is_experienced = is_senior or requires_experienced_candidate(title) or requires_experienced_candidate(description)
+
+        if is_experienced:
+            why = "Experienced tech role (requires prior experience)"
+            if is_remote:
+                why += " • Remote-friendly"
+        elif is_stale:
             if matched_stack_ordered:
                 why = f"Borderline: matches {matched_stack_ordered[0]} but posted 3+ weeks ago"
             else:

@@ -24,6 +24,7 @@ import urllib.parse
 from dotenv import load_dotenv
 import httpx
 
+from gcc_job_radar.config import EXCLUDE_TITLE_PATTERN
 from gcc_job_radar.db import (
     canonicalize_url,
     get_applied_and_dismissed_companies,
@@ -31,6 +32,7 @@ from gcc_job_radar.db import (
     init_db,
     record_jobs,
 )
+from gcc_job_radar.filters import _MTS_MASK_PATTERN, requires_experienced_candidate
 from gcc_job_radar.models import ATSProvider, JobPosting
 from gcc_job_radar.relevance import score_job_posting
 
@@ -118,10 +120,19 @@ async def _search_serper_ats(
     clean_query = query.strip()
     clean_loc = location.strip() if location else "India"
 
+    # Support modern AI / vibe coder queries with semantic expansion
+    if re.search(r"\bvibe\s*cod(?:er|ing)?\b", clean_query, re.IGNORECASE):
+        dork_query = '("vibe coder" OR "AI Engineer" OR "Full Stack" "Cursor" OR "LLM")'
+    else:
+        dork_query = f'"{clean_query}"'
+
+    is_fresher_req = any(term in experience.lower() for term in ("entry", "fresher", "junior", "intern", "0-2", "new grad"))
+    exp_exclusion = " -senior -lead -staff -principal -director -manager -vp -architect -head" if is_fresher_req else ""
+
     # Dork 1: Direct ATS boards (Greenhouse, Lever, Ashby, Workday)
-    dork1 = f'(site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com OR site:myworkdayjobs.com) "{clean_query}" "{clean_loc}"'
+    dork1 = f'(site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com OR site:myworkdayjobs.com) {dork_query} "{clean_loc}"{exp_exclusion}'
     # Dork 2: Direct LinkedIn job views
-    dork2 = f'site:in.linkedin.com/jobs/view "{clean_query}" "{clean_loc}"'
+    dork2 = f'site:in.linkedin.com/jobs/view {dork_query} "{clean_loc}"{exp_exclusion}'
 
     headers = {
         "X-API-KEY": serper_key,
@@ -159,6 +170,13 @@ async def _search_serper_ats(
                     snippet = item.get("snippet", "")
                     comp, clean_title = _extract_company_and_title(title, link, snippet)
 
+                    # Exclude senior roles if searching for fresher/entry-level
+                    sanitized_t = _MTS_MASK_PATTERN.sub("mts_role", clean_title)
+                    if is_fresher_req and EXCLUDE_TITLE_PATTERN.search(sanitized_t):
+                        continue
+                    if is_fresher_req and (requires_experienced_candidate(snippet) or requires_experienced_candidate(clean_title)):
+                        continue
+
                     results.append({
                         "title": clean_title,
                         "company": comp,
@@ -188,12 +206,27 @@ async def _search_remotive_jobs(
         data = resp.json()
         results: list[dict[str, Any]] = []
 
+        # Keywords to match
+        stop_words = {"a", "an", "the", "for", "in", "at", "to", "and", "or", "of", "with", "job", "jobs", "role", "roles", "fresher", "freshers", "opening", "openings", "hiring"}
+        query_words = [w.lower() for w in re.findall(r"\b[A-Za-z0-9+#.-]+\b", query) if w.lower() not in stop_words and len(w) > 1]
+
         for item in data.get("jobs", []):
+            title = item.get("title", "Software Engineer")
+            sanitized_t = _MTS_MASK_PATTERN.sub("mts_role", title)
+            # Strictly reject senior / lead roles from Remotive
+            if EXCLUDE_TITLE_PATTERN.search(sanitized_t):
+                continue
+
+            # Must have at least one keyword match if specific query words provided
+            tags = [str(t).lower() for t in item.get("tags", [])]
+            search_corpus = f"{title} {' '.join(tags)}".lower()
+            if query_words and not any(qw in search_corpus for qw in query_words):
+                continue
+
             req_loc = str(item.get("candidate_required_location", "")).lower()
-            # Accept if Worldwide, Anywhere, India, or if user asked for worldwide/remote
             if any(term in req_loc for term in ("worldwide", "anywhere", "india", "apac", "remote")) or not location:
                 results.append({
-                    "title": item.get("title", "Software Engineer"),
+                    "title": title,
                     "company": item.get("company_name", "Tech Startup"),
                     "apply_url": item.get("url", ""),
                     "snippet": f"Remote ({item.get('candidate_required_location', 'Worldwide')}) • Tags: {', '.join(item.get('tags', [])[:4])}",
@@ -220,12 +253,26 @@ async def _search_arbeitnow_jobs(
         data = resp.json()
         results: list[dict[str, Any]] = []
 
+        stop_words = {"a", "an", "the", "for", "in", "at", "to", "and", "or", "of", "with", "job", "jobs", "role", "roles", "fresher", "freshers", "opening", "openings", "hiring"}
+        query_words = [w.lower() for w in re.findall(r"\b[A-Za-z0-9+#.-]+\b", query) if w.lower() not in stop_words and len(w) > 1]
+
         for item in data.get("data", []):
+            title = item.get("title", "Developer")
+            sanitized_t = _MTS_MASK_PATTERN.sub("mts_role", title)
+            # Strictly reject senior / lead roles from Arbeitnow
+            if EXCLUDE_TITLE_PATTERN.search(sanitized_t):
+                continue
+
+            tags = [str(t).lower() for t in item.get("tags", [])]
+            search_corpus = f"{title} {' '.join(tags)}".lower()
+            if query_words and not any(qw in search_corpus for qw in query_words):
+                continue
+
             is_remote = bool(item.get("remote", False))
             loc = item.get("location", "")
             if is_remote or "india" in loc.lower() or "remote" in loc.lower():
                 results.append({
-                    "title": item.get("title", "Developer"),
+                    "title": title,
                     "company": item.get("company_name", "Company"),
                     "apply_url": item.get("url", ""),
                     "snippet": f"Location: {loc} • Tags: {', '.join(item.get('tags', [])[:4])}",
@@ -300,6 +347,16 @@ async def search_internet_jobs(
 
         # Suppress if user has applied or dismissed this company
         if company.lower() in applied_comps or company.lower() in dismissed_comps:
+            continue
+
+        # Suppress senior or experienced roles when searching for entry-level / fresher
+        is_fresher_req = any(term in experience.lower() for term in ("entry", "fresher", "junior", "intern", "0-2", "new grad"))
+        sanitized_title = _MTS_MASK_PATTERN.sub("mts_role", title)
+        if is_fresher_req and EXCLUDE_TITLE_PATTERN.search(sanitized_title):
+            continue
+
+        snippet = item.get("snippet", "")
+        if is_fresher_req and (requires_experienced_candidate(snippet) or requires_experienced_candidate(title)):
             continue
 
         combo_key = (company.lower(), title.lower())
