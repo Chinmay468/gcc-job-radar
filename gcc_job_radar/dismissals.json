@@ -59,7 +59,35 @@
       "company": "Flipkart",
       "title": "SDE-1",
       "apply_url": "https://flipkart.turbohire.co/job/9cd36340-4399-4782-8fa9-7bd60cf1de85"
+    },
+    {
+      "id": "chrome_fampay_security_engineer_intern",
+      "company": "fampay",
+      "title": "Security Engineer Intern",
+      "apply_url": "https://ctf.fampay.co"
+    },
+    {
+      "id": "manual_fampay_1790710127318",
+      "company": "Fampay",
+      "title": "All Roles",
+      "apply_url": "https://www.google.com/search?q=Fampay+All+Roles+careers"
+    },
+    {
+      "id": "chrome_emea___gitlab___remote___remote___arbeitnow_forward_deployed_engineer___em",
+      "company": "EMEA \u2013 gitlab \u2013 Remote | Remote | Arbeitnow",
+      "title": "Forward Deployed Engineer - EMEA",
+      "apply_url": "https://www.arbeitnow.com/jobs/companies/gitlab/remote-forward-deployed-engineer-emea-407864"
+    },
+    {
+      "id": "chrome_schwerpunkt_angular___isento_gmbh___nuremberg___arbeitnow_software_developer__m_w_d____s",
+      "company": "Schwerpunkt Angular \u2013 isento GmbH \u2013 Nuremberg | Arbeitnow",
+      "title": "Software Developer (m/w/d) - Schwerpunkt Angular",
+      "apply_url": "https://www.arbeitnow.com/jobs/companies/isento-gmbh/software-developer-schwerpunkt-angular-nuremberg-264132"
     }
   ],
-  "dismissed_companies": []
+  "dismissed_companies": [
+    "Fampay",
+    "EMEA \u2013 gitlab \u2013 Remote | Remote | Arbeitnow",
+    "Schwerpunkt Angular \u2013 isento GmbH \u2013 Nuremberg | Arbeitnow"
+  ]
 }

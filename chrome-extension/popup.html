@@ -11,11 +11,52 @@
     <!-- Header -->
     <header class="header">
       <div class="brand">
-        <div class="logo-radar">
-          <span class="radar-sweep"></span>
+        <div class="logo-radar-wrap" title="GCC Radar Scanning Engine">
+          <svg class="radar-svg" viewBox="0 0 40 40" width="34" height="34" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <radialGradient id="radar-bg-glow" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#0284c7" stop-opacity="0.4"/>
+                <stop offset="60%" stop-color="#0369a1" stop-opacity="0.15"/>
+                <stop offset="100%" stop-color="#0b1329" stop-opacity="0.95"/>
+              </radialGradient>
+              <linearGradient id="sweep-beam-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.85"/>
+                <stop offset="50%" stop-color="#06b6d4" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            
+            <!-- Outer Bezel & Dark Background -->
+            <circle cx="20" cy="20" r="19" fill="url(#radar-bg-glow)" stroke="#0284c7" stroke-width="1.2" stroke-opacity="0.8"/>
+            
+            <!-- Concentric Range Rings -->
+            <circle cx="20" cy="20" r="14" fill="none" stroke="#38bdf8" stroke-width="0.75" stroke-opacity="0.35" stroke-dasharray="1.5 2"/>
+            <circle cx="20" cy="20" r="8.5" fill="none" stroke="#38bdf8" stroke-width="0.75" stroke-opacity="0.45"/>
+            <circle cx="20" cy="20" r="3" fill="#38bdf8" fill-opacity="0.2" stroke="#38bdf8" stroke-width="0.75"/>
+
+            <!-- Precision Crosshairs -->
+            <line x1="2" y1="20" x2="38" y2="20" stroke="#38bdf8" stroke-width="0.7" stroke-opacity="0.35"/>
+            <line x1="20" y1="2" x2="20" y2="38" stroke="#38bdf8" stroke-width="0.7" stroke-opacity="0.35"/>
+            
+            <!-- Rotating Sweeper Sector -->
+            <g class="radar-rotating-group">
+              <path d="M 20 20 L 38 20 A 18 18 0 0 0 32.7 7.3 Z" fill="url(#sweep-beam-grad)"/>
+              <line x1="20" y1="20" x2="38" y2="20" stroke="#7dd3fc" stroke-width="1.5" stroke-linecap="round"/>
+            </g>
+            
+            <!-- Dynamic Pulsing Target Blips (Job Leads) -->
+            <circle class="radar-blip blip-1" cx="29" cy="12" r="1.8" fill="#10b981"/>
+            <circle class="radar-blip blip-2" cx="12" cy="27" r="1.4" fill="#38bdf8"/>
+            
+            <!-- Center Bullseye -->
+            <circle cx="20" cy="20" r="1.5" fill="#f8fafc"/>
+          </svg>
         </div>
-        <div>
-          <h1 class="title">GCC Job Radar</h1>
+        <div class="brand-text">
+          <div class="title-row">
+            <h1 class="title">GCC Job Radar</h1>
+            <span class="badge-v">v2.0</span>
+          </div>
           <p class="subtitle">AI Evaluator & Resume Tailor</p>
         </div>
       </div>
@@ -27,15 +68,19 @@
 
     <!-- Bridge Warning Banner (hidden when online) -->
     <div id="bridge-warning" class="bridge-warning hidden">
-      <span>⚠️ Local Bridge is offline.</span>
-      <button id="btn-retry-bridge" class="btn-text">Retry</button>
+      <div class="warning-header">
+        <span>⚠️ Local Bridge is offline</span>
+        <button id="btn-retry-bridge" class="btn-text">Retry</button>
+      </div>
       <div class="bridge-help">Run <code>python tools/extension_bridge.py</code> in project root.</div>
     </div>
 
     <!-- Job Info Input Card -->
-    <section class="card">
+    <section class="card card-input">
       <div class="card-header">
-        <span class="card-title">Job Description</span>
+        <span class="card-title">
+          <span class="card-title-icon">📋</span> Job Details
+        </span>
         <div class="card-header-actions">
           <a id="btn-view-master-pdf" class="btn-text" href="#" title="View base Master Resume PDF">📄 Base Master PDF</a>
           <button id="btn-reextract" class="btn-text" title="Re-extract from current page">🔄 Refresh from Page</button>
@@ -55,22 +100,29 @@
 
       <div class="form-group">
         <div class="jd-header-label">
-          <label for="input-jd">Job Description Text</label>
-          <span id="jd-char-count" class="char-count">0 chars</span>
+          <div class="jd-label-meta">
+            <label for="input-jd">Job Description</label>
+            <span id="jd-char-count" class="char-count">0 chars</span>
+          </div>
+          <button id="btn-toggle-jd" class="btn-toggle-compact" type="button" title="Toggle compact/expanded view">
+            <span id="toggle-jd-icon">↕️</span> <span id="toggle-jd-text">Collapse</span>
+          </button>
         </div>
-        <textarea id="input-jd" rows="5" placeholder="Paste JD or browse to any job page to auto-extract..."></textarea>
+        <div id="jd-textarea-wrap" class="jd-textarea-wrap">
+          <textarea id="input-jd" rows="4" placeholder="Paste JD or browse to any job page to auto-extract..."></textarea>
+        </div>
       </div>
 
       <!-- Action Buttons -->
       <div class="button-group">
-        <button id="btn-evaluate" class="btn btn-secondary">
-          <span class="btn-icon">⚡</span> Evaluate Fit
+        <button id="btn-evaluate" class="btn btn-secondary btn-evaluate" title="Run fast rule checks & AI deep evaluation">
+          <span class="btn-icon">⚡</span> <span>Evaluate Fit</span>
         </button>
-        <button id="btn-tailor" class="btn btn-primary">
-          <span class="btn-icon">📄</span> Tailor & Compile PDF
+        <button id="btn-tailor" class="btn btn-primary btn-tailor" title="Tailor resume bullets & compile PDF with local Tectonic engine">
+          <span class="btn-icon">✨</span> <span>Tailor Resume</span>
         </button>
-        <button id="btn-dismiss-main" class="btn btn-danger-outline" title="Dismiss this job & company from radar">
-          <span class="btn-icon">🗑️</span> Dismiss
+        <button id="btn-dismiss-main" class="btn btn-danger-outline btn-dismiss" title="Dismiss this job & company from radar">
+          <span class="btn-icon">🗑️</span> <span>Dismiss</span>
         </button>
       </div>
 
@@ -80,26 +132,38 @@
 
     <!-- Progress / Loading Indicator -->
     <div id="loading-card" class="card loading-card hidden">
-      <div class="spinner"></div>
+      <div class="spinner-ring">
+        <div class="spinner-core"></div>
+      </div>
       <div id="loading-text" class="loading-text">Analyzing job description...</div>
     </div>
 
     <!-- Evaluation Results Card -->
-    <section id="eval-card" class="card hidden">
+    <section id="eval-card" class="card eval-card hidden">
       <div class="card-header">
         <div class="eval-header-title">
-          <span class="card-title">Fit Evaluation</span>
-          <span id="verdict-badge" class="verdict-badge">APPLY</span>
+          <span class="card-title">
+            <span class="card-title-icon">🎯</span> Fit Evaluation
+          </span>
+          <span id="verdict-badge" class="verdict-badge verdict-apply">APPLY</span>
         </div>
         <div class="card-header-actions">
           <button id="btn-dismiss-eval" class="btn-text btn-dismiss-link" title="Dismiss this job/company from future radar alerts">🗑️ Dismiss Job</button>
         </div>
       </div>
 
-      <div class="score-display">
-        <div class="score-number-wrap">
-          <span id="score-val" class="score-number">95</span>
-          <span class="score-total">/100</span>
+      <!-- Radial Circular Score Gauge & Meta -->
+      <div class="score-gauge-card">
+        <div class="gauge-wrap" title="Calculated Fit Score">
+          <svg class="score-gauge-svg" viewBox="0 0 76 76" width="76" height="76">
+            <circle class="gauge-bg" cx="38" cy="38" r="32" stroke-width="6" fill="none"/>
+            <circle id="gauge-fill" class="gauge-fill" cx="38" cy="38" r="32" stroke-width="6" fill="none"
+                    stroke-dasharray="201" stroke-dashoffset="30" stroke-linecap="round"/>
+          </svg>
+          <div class="gauge-center-text">
+            <span id="score-val" class="gauge-score">95</span>
+            <span class="gauge-denom">/100</span>
+          </div>
         </div>
         <div class="score-meta">
           <div id="one-line-reason" class="one-line-reason">Strong match on core Java/Spring Boot stack.</div>
@@ -109,12 +173,16 @@
 
       <!-- Skill Pills -->
       <div id="matched-skills-container" class="skills-block hidden">
-        <div class="skills-title">Matched Stack</div>
+        <div class="skills-title">
+          <span class="skills-icon">✔</span> Matched Stack
+        </div>
         <div id="matched-skills" class="pill-group"></div>
       </div>
 
       <div id="missing-skills-container" class="skills-block hidden">
-        <div class="skills-title">Missing / New Skills</div>
+        <div class="skills-title">
+          <span class="skills-icon warning">⚠</span> Missing / New Skills
+        </div>
         <div id="missing-skills" class="pill-group"></div>
       </div>
 

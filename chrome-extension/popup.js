@@ -15,6 +15,10 @@ const inputTitle = document.getElementById("input-title");
 const inputJd = document.getElementById("input-jd");
 const jdCharCount = document.getElementById("jd-char-count");
 const btnReextract = document.getElementById("btn-reextract");
+const btnToggleJd = document.getElementById("btn-toggle-jd");
+const jdTextareaWrap = document.getElementById("jd-textarea-wrap");
+const toggleJdText = document.getElementById("toggle-jd-text");
+const toggleJdIcon = document.getElementById("toggle-jd-icon");
 
 const btnEvaluate = document.getElementById("btn-evaluate");
 const btnTailor = document.getElementById("btn-tailor");
@@ -29,6 +33,7 @@ const verdictBadge = document.getElementById("verdict-badge");
 const btnDismissEval = document.getElementById("btn-dismiss-eval");
 const dismissBanner = document.getElementById("dismiss-banner");
 const scoreVal = document.getElementById("score-val");
+const gaugeFill = document.getElementById("gauge-fill");
 const oneLineReason = document.getElementById("one-line-reason");
 const applyAction = document.getElementById("apply-action");
 const matchedSkillsContainer = document.getElementById("matched-skills-container");
@@ -78,6 +83,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function setupEventListeners() {
   inputJd.addEventListener("input", updateCharCount);
+  if (btnToggleJd) btnToggleJd.addEventListener("click", () => toggleJdCompact());
   btnRetryBridge.addEventListener("click", checkBridgeHealth);
   btnReextract.addEventListener("click", loadJobFromActiveTab);
   btnEvaluate.addEventListener("click", handleEvaluate);
@@ -119,6 +125,23 @@ function openUrlInTab(url) {
 function updateCharCount() {
   const len = inputJd.value.trim().length;
   jdCharCount.textContent = `${len.toLocaleString()} chars`;
+}
+
+function toggleJdCompact(forceCompact) {
+  if (!jdTextareaWrap) return;
+  const isCompact = typeof forceCompact === "boolean"
+    ? forceCompact
+    : !jdTextareaWrap.classList.contains("compact-mode");
+
+  if (isCompact) {
+    jdTextareaWrap.classList.add("compact-mode");
+    if (toggleJdText) toggleJdText.textContent = "Expand";
+    if (toggleJdIcon) toggleJdIcon.textContent = "↕️";
+  } else {
+    jdTextareaWrap.classList.remove("compact-mode");
+    if (toggleJdText) toggleJdText.textContent = "Collapse";
+    if (toggleJdIcon) toggleJdIcon.textContent = "↕️";
+  }
 }
 
 // 1. Check Local Bridge Health
@@ -252,6 +275,33 @@ function renderEvaluation(data) {
   verdictBadge.textContent = verdict;
   verdictBadge.className = `verdict-badge verdict-${verdict.toLowerCase()}`;
 
+  // Radial Circular Gauge Animation
+  if (gaugeFill) {
+    const circumference = 201; // 2 * pi * 32
+    const scoreNum = Math.max(0, Math.min(100, Number(data.score) || 0));
+    const offset = circumference - (scoreNum / 100) * circumference;
+    gaugeFill.style.strokeDashoffset = offset;
+
+    if (verdict === "APPLY") {
+      gaugeFill.style.stroke = "#10b981";
+      gaugeFill.style.filter = "drop-shadow(0 0 6px rgba(16, 185, 129, 0.45))";
+    } else if (verdict === "BORDERLINE") {
+      gaugeFill.style.stroke = "#f59e0b";
+      gaugeFill.style.filter = "drop-shadow(0 0 6px rgba(245, 158, 11, 0.45))";
+    } else if (verdict === "DISMISSED") {
+      gaugeFill.style.stroke = "#64748b";
+      gaugeFill.style.filter = "none";
+    } else {
+      gaugeFill.style.stroke = "#f43f5e";
+      gaugeFill.style.filter = "drop-shadow(0 0 6px rgba(244, 63, 94, 0.45))";
+    }
+  }
+
+  // Auto-compact long JD so score & evaluation are immediately visible
+  if (inputJd.value.trim().length > 400) {
+    toggleJdCompact(true);
+  }
+
   oneLineReason.textContent = data.one_line_reason || "Evaluated against candidate profile.";
   applyAction.textContent = data.apply_action || "";
 
@@ -261,7 +311,7 @@ function renderEvaluation(data) {
     data.matched_skills.forEach((s) => {
       const pill = document.createElement("span");
       pill.className = "pill pill-match";
-      pill.textContent = s;
+      pill.innerHTML = `<span class="skills-icon">✔</span> ${s}`;
       matchedSkills.appendChild(pill);
     });
     matchedSkillsContainer.classList.remove("hidden");
@@ -275,7 +325,7 @@ function renderEvaluation(data) {
     data.missing_skills.forEach((s) => {
       const pill = document.createElement("span");
       pill.className = "pill pill-missing";
-      pill.textContent = s;
+      pill.innerHTML = `<span class="skills-icon warning">⚠</span> ${s}`;
       missingSkills.appendChild(pill);
     });
     missingSkillsContainer.classList.remove("hidden");
@@ -583,6 +633,11 @@ async function handleDismissJob() {
     if (verdictBadge) {
       verdictBadge.textContent = "DISMISSED";
       verdictBadge.className = "verdict-badge verdict-dismissed";
+    }
+
+    if (gaugeFill) {
+      gaugeFill.style.stroke = "#64748b";
+      gaugeFill.style.filter = "none";
     }
 
     if (dismissBanner) {
