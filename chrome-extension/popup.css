@@ -1,23 +1,29 @@
 /**
- * popup.css — GCC Job Radar & Resume Tailor (v2.0 UI Revamp)
- * Cyberpunk & Developer Tool Aesthetic: Glassmorphism, Precision Radar SVG, Radial Gauge
+ * popup.css — GCC Job Radar & Resume Tailor (v2.1 Curved & Elevated Palette)
+ * Aesthetic: Velvet Midnight, Soft Organic Curves, Indigo/Cyan Accents, Glassmorphic Depth
  */
 
 :root {
-  --bg-primary: #070a12;
-  --bg-secondary: #0d1424;
-  --bg-tertiary: #17223b;
-  --bg-card: rgba(13, 20, 36, 0.78);
-  --bg-input: rgba(10, 16, 30, 0.85);
+  /* Elevated Velvet Midnight Palette */
+  --bg-primary: #090d16;
+  --bg-secondary: #0f1524;
+  --bg-card: rgba(16, 22, 36, 0.74);
+  --bg-input: rgba(11, 16, 28, 0.85);
+  --bg-subtle: rgba(255, 255, 255, 0.04);
 
+  /* Modern Glass Borders */
   --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-card: rgba(255, 255, 255, 0.07);
-  --border-focus: #38bdf8;
+  --border-card: rgba(255, 255, 255, 0.075);
+  --border-focus: #6366f1;
 
+  /* Typography Colors */
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
 
+  /* Sophisticated Accents */
+  --accent-indigo: #6366f1;
+  --accent-indigo-glow: rgba(99, 102, 241, 0.35);
   --accent-cyan: #38bdf8;
   --accent-cyan-glow: rgba(56, 189, 248, 0.35);
   --accent-emerald: #10b981;
@@ -27,10 +33,14 @@
   --accent-rose: #f43f5e;
   --accent-rose-glow: rgba(244, 63, 94, 0.35);
 
+  /* Smooth Curved Radii */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-pill: 9999px;
+
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", sans-serif;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
 }
 
 * {
@@ -39,13 +49,18 @@
   padding: 0;
 }
 
+html, body {
+  border-radius: var(--radius-lg);
+  overflow-x: hidden;
+}
+
 body {
   width: 460px;
   max-height: 600px;
   overflow-y: auto;
   font-family: var(--font-family);
-  background: radial-gradient(circle at 90% 0%, rgba(2, 132, 199, 0.15) 0%, transparent 50%),
-              radial-gradient(circle at 0% 100%, rgba(16, 185, 129, 0.08) 0%, transparent 40%),
+  background: radial-gradient(circle at 85% 0%, rgba(99, 102, 241, 0.18) 0%, transparent 45%),
+              radial-gradient(circle at 10% 100%, rgba(14, 165, 233, 0.12) 0%, transparent 40%),
               var(--bg-primary);
   color: var(--text-main);
   font-size: 13px;
@@ -58,11 +73,11 @@ body {
   height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(7, 10, 18, 0.6);
+  background: rgba(9, 13, 22, 0.6);
 }
 ::-webkit-scrollbar-thumb {
   background: #1e293b;
-  border-radius: 4px;
+  border-radius: var(--radius-pill);
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
@@ -100,9 +115,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(13, 20, 36, 0.9);
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  box-shadow: 0 0 14px rgba(14, 165, 233, 0.3), inset 0 0 8px rgba(14, 165, 233, 0.2);
+  background: rgba(15, 21, 37, 0.95);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.28), inset 0 0 8px rgba(14, 165, 233, 0.15);
   flex-shrink: 0;
 }
 
@@ -152,7 +167,7 @@ body {
   font-size: 15px;
   font-weight: 800;
   letter-spacing: -0.4px;
-  background: linear-gradient(135deg, #ffffff 25%, #7dd3fc 100%);
+  background: linear-gradient(135deg, #ffffff 30%, #c7d2fe 70%, #38bdf8 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -160,12 +175,12 @@ body {
 .badge-v {
   font-size: 9px;
   font-weight: 700;
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  padding: 1px 5px;
-  border-radius: 4px;
-  letter-spacing: 0.2px;
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.3px;
 }
 
 .subtitle {
@@ -173,17 +188,17 @@ body {
   color: var(--text-muted);
 }
 
-/* Frosted Status Badge */
+/* Frosted Status Pill Capsule */
 .status-badge {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(8px);
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(10px);
   border: 1px solid var(--border-subtle);
   transition: all 0.2s ease;
 }
@@ -257,26 +272,26 @@ body {
 .bridge-help code {
   background-color: rgba(0, 0, 0, 0.4);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   color: #bae6fd;
 }
 
 /* ==========================================================================
-   Cards (Glassmorphic)
+   Cards (Curved & Glassmorphic)
    ========================================================================== */
 
 .card {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
   border: 1px solid var(--border-card);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  padding: 13px 15px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
-  transition: border-color 0.2s ease;
+  gap: 11px;
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
 }
 
 .card-header {
@@ -289,7 +304,7 @@ body {
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
   color: #cbd5e1;
   display: inline-flex;
   align-items: center;
@@ -307,7 +322,7 @@ body {
 }
 
 /* ==========================================================================
-   Form Fields & Controls
+   Form Fields & Controls (Curved Edges)
    ========================================================================== */
 
 .form-row {
@@ -335,18 +350,18 @@ input[type="text"] {
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  padding: 7px 10px;
+  padding: 8px 12px;
   color: var(--text-main);
   font-size: 12px;
   font-family: inherit;
   outline: none;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
 }
 
 input[type="text"]:focus {
   border-color: var(--border-focus);
-  background: rgba(15, 23, 42, 0.95);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+  background: rgba(15, 22, 38, 0.95);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
 }
 
 .jd-header-label {
@@ -368,13 +383,13 @@ input[type="text"]:focus {
 }
 
 .btn-toggle-compact {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 12px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -382,7 +397,7 @@ input[type="text"]:focus {
   transition: all 0.15s ease;
 }
 .btn-toggle-compact:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.1);
   color: var(--text-main);
   border-color: rgba(255, 255, 255, 0.2);
 }
@@ -403,23 +418,23 @@ textarea {
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  padding: 9px 12px;
   color: #e2e8f0;
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   line-height: 1.45;
   resize: vertical;
   outline: none;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
 }
 
 textarea:focus {
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
 }
 
 /* ==========================================================================
-   Action Command Bar (Unified 38px Buttons)
+   Action Command Bar (Curved 14px Buttons, Velvet Palette)
    ========================================================================== */
 
 .button-group {
@@ -438,7 +453,7 @@ textarea:focus {
   padding: 0 10px;
   font-size: 12px;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
@@ -460,54 +475,54 @@ textarea:focus {
   transform: scale(1.12);
 }
 
-/* Evaluate Button (Slate Glass) */
+/* Evaluate Button (Frosted Slate Glass) */
 .btn-evaluate, .btn-secondary {
-  background: rgba(30, 41, 59, 0.85);
+  background: rgba(30, 41, 59, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #f1f5f9;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
 }
 .btn-evaluate:hover, .btn-secondary:hover {
-  background: rgba(51, 65, 85, 0.95);
-  border-color: rgba(56, 189, 248, 0.4);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  background: rgba(51, 65, 85, 0.85);
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
-/* Tailor Button (Electric Radiant Cyan) */
+/* Tailor Button (Radiant Indigo-to-Cyan Gradient) */
 .btn-tailor, .btn-primary {
-  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 50%, #38bdf8 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #2563eb 50%, #06b6d4 100%);
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 10px rgba(14, 165, 233, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.38);
   font-weight: 700;
 }
 .btn-tailor:hover, .btn-primary:hover {
-  background: linear-gradient(135deg, #0369a1 0%, #0284c7 50%, #0ea5e9 100%);
-  box-shadow: 0 3px 14px rgba(14, 165, 233, 0.55);
+  background: linear-gradient(135deg, #4338ca 0%, #1d4ed8 50%, #0891b2 100%);
+  box-shadow: 0 4px 18px rgba(79, 70, 229, 0.55);
 }
 
-/* Dismiss Button (Dark Rose Glass) */
+/* Dismiss Button (Frosted Rose Smoke) */
 .btn-dismiss, .btn-danger-outline {
   background: rgba(244, 63, 94, 0.08);
-  border: 1px solid rgba(244, 63, 94, 0.35);
-  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: #fda4af;
 }
 .btn-dismiss:hover, .btn-danger-outline:hover {
-  background: rgba(244, 63, 94, 0.18);
+  background: rgba(244, 63, 94, 0.2);
   border-color: #f43f5e;
-  color: #fda4af;
-  box-shadow: 0 2px 10px rgba(244, 63, 94, 0.25);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(244, 63, 94, 0.28);
 }
 
 .btn-success {
   background: linear-gradient(135deg, #059669, #10b981);
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
 }
 .btn-success:hover {
   background: linear-gradient(135deg, #047857, #059669);
-  box-shadow: 0 3px 14px rgba(16, 185, 129, 0.5);
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.5);
 }
 
 .btn-outline {
@@ -516,7 +531,7 @@ textarea:focus {
   color: var(--text-muted);
 }
 .btn-outline:hover {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-subtle);
   color: var(--text-main);
   border-color: var(--text-muted);
 }
@@ -557,17 +572,17 @@ textarea:focus {
 }
 
 /* ==========================================================================
-   Radial Circular Score Gauge Card
+   Radial Circular Score Gauge Card (Curved 14px)
    ========================================================================== */
 
 .score-gauge-card {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: rgba(10, 16, 30, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  background: rgba(12, 17, 29, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  padding: 11px 13px;
 }
 
 .gauge-wrap {
@@ -627,7 +642,7 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  border-left: 2px solid var(--accent-cyan);
+  border-left: 2px solid var(--accent-indigo);
   padding-left: 10px;
 }
 
@@ -645,7 +660,7 @@ textarea:focus {
 }
 
 /* ==========================================================================
-   Verdict Badges
+   Verdict Badges (Curved 8px)
    ========================================================================== */
 
 .eval-header-title {
@@ -657,8 +672,8 @@ textarea:focus {
 .verdict-badge {
   font-size: 10px;
   font-weight: 800;
-  padding: 3px 9px;
-  border-radius: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-xs);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   transition: all 0.2s ease;
@@ -668,21 +683,21 @@ textarea:focus {
   background-color: rgba(16, 185, 129, 0.16);
   color: #34d399;
   border: 1px solid rgba(16, 185, 129, 0.45);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.22);
 }
 
 .verdict-borderline {
   background-color: rgba(245, 158, 11, 0.16);
   color: #fbbf24;
   border: 1px solid rgba(245, 158, 11, 0.45);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.2);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.22);
 }
 
 .verdict-skip {
   background-color: rgba(244, 63, 94, 0.16);
   color: #fb7185;
   border: 1px solid rgba(244, 63, 94, 0.45);
-  box-shadow: 0 0 8px rgba(244, 63, 94, 0.2);
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.22);
 }
 
 .verdict-dismissed {
@@ -692,7 +707,7 @@ textarea:focus {
 }
 
 /* ==========================================================================
-   Skill Pills & Chips
+   Skill Pills & Chips (Pill Shaped)
    ========================================================================== */
 
 .skills-block {
@@ -727,8 +742,8 @@ textarea:focus {
 .pill {
   font-size: 11px;
   font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -764,27 +779,27 @@ textarea:focus {
 }
 
 .flags-list li {
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  border-radius: var(--radius-xs);
   line-height: 1.35;
 }
 
 .green-flags li {
   background-color: rgba(16, 185, 129, 0.08);
   color: #a7f3d0;
-  border-left: 2px solid var(--accent-emerald);
+  border-left: 3px solid var(--accent-emerald);
 }
 
 .hard-blocks li {
   background-color: rgba(244, 63, 94, 0.1);
   color: #fecdd3;
-  border-left: 2px solid var(--accent-rose);
+  border-left: 3px solid var(--accent-rose);
 }
 
 .warnings li {
   background-color: rgba(245, 158, 11, 0.1);
   color: #fef08a;
-  border-left: 2px solid var(--accent-amber);
+  border-left: 3px solid var(--accent-amber);
 }
 
 /* Dismiss Banner */
@@ -792,7 +807,7 @@ textarea:focus {
   background-color: rgba(244, 63, 94, 0.12);
   border: 1px solid rgba(244, 63, 94, 0.35);
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 11px;
   color: #fecdd3;
   display: flex;
@@ -816,13 +831,13 @@ textarea:focus {
   align-items: center;
   text-align: center;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(16, 22, 36, 0.88);
 }
 
 .spinner-ring {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(14, 165, 233, 0.2);
+  border: 3px solid rgba(99, 102, 241, 0.2);
   border-top-color: var(--accent-cyan);
   border-radius: 50%;
   animation: spin 0.75s linear infinite;
@@ -851,7 +866,7 @@ textarea:focus {
 }
 
 /* ==========================================================================
-   Tailor Studio & PDF Preview Frame
+   Tailor Studio & PDF Preview Frame (Curved)
    ========================================================================== */
 
 .tailor-header {
@@ -900,10 +915,10 @@ textarea:focus {
 }
 
 .preview-overlay-info {
-  padding: 4px 8px;
+  padding: 5px 8px;
   font-size: 10px;
   color: var(--text-dim);
-  background: rgba(15, 23, 42, 0.9);
+  background: rgba(16, 22, 36, 0.92);
   text-align: center;
 }
 
@@ -911,8 +926,8 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background: rgba(10, 16, 30, 0.6);
-  padding: 8px 10px;
+  background: rgba(11, 16, 28, 0.65);
+  padding: 9px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
 }
