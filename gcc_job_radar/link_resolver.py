@@ -122,6 +122,7 @@ KNOWN_CAREER_PORTALS: dict[str, str] = {
     "huron consulting group": "https://www.huronconsultinggroup.com/careers",
     "huron consulting": "https://www.huronconsultinggroup.com/careers",
     "schlumberger": "https://careers.slb.com",
+    "metlife": "https://www.metlifecareers.com",
     "shaadi.com": "https://people.shaadi.com",
     "shaadi": "https://people.shaadi.com",
     "enterpret": "https://enterpret.com/careers",
@@ -195,6 +196,20 @@ def is_glassdoor_url(url: str) -> bool:
         return any(domain in netloc for domain in GLASSDOOR_DOMAINS)
     except Exception:
         return False
+
+
+def is_specific_aggregator_job_url(url: str) -> bool:
+    """Check if an aggregator URL points to a specific job opening rather than a generic search or portal page."""
+    if not url:
+        return False
+    u = url.lower()
+    if "linkedin.com" in u:
+        return bool(re.search(r"/jobs/(?:view|collections)/|\bcurrentJobId=\d+", u) or "/comm/jobs/view/" in u)
+    if "indeed.com" in u:
+        return bool("/viewjob" in u or "/rc/clk" in u or "jk=" in u)
+    if "naukri.com" in u:
+        return bool("/job-listings" in u or "/jd/" in u)
+    return False
 
 
 def _normalize_company_name(name: str) -> str:
@@ -505,6 +520,20 @@ def resolve_effective_apply_url(job: Any) -> tuple[str, str, str]:
 
     # 5. If URL is another aggregator (LinkedIn, Indeed, Naukri, etc.):
     if is_aggregator_url(orig_url_str):
+        # If this points to a specific job opening on LinkedIn, Indeed, or Naukri,
+        # KEEP the direct job URL so the candidate lands directly on the application page!
+        if is_specific_aggregator_job_url(orig_url_str):
+            url_lower = orig_url_str.lower()
+            if "linkedin.com" in url_lower:
+                platform_name = "LinkedIn"
+            elif "indeed.com" in url_lower:
+                platform_name = "Indeed"
+            elif "naukri.com" in url_lower:
+                platform_name = "Naukri"
+            else:
+                platform_name = "Platform"
+            return orig_url_str, fallback_search, f"Apply on {platform_name}"
+
         portal = resolve_company_career_portal(company)
         if portal:
             return portal, fallback_search, "Official Careers Portal"

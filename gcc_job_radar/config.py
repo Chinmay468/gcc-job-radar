@@ -4416,7 +4416,6 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="The Orchard", provider=ATSProvider.GREENHOUSE, board_token="theorchard"),
     CompanyConfig(name="Britive", provider=ATSProvider.GREENHOUSE, board_token="britive"),
     CompanyConfig(name="Populla", provider=ATSProvider.GREENHOUSE, board_token="poppulo"),
-    CompanyConfig(name="MetLife", provider=ATSProvider.LEVER, board_token="metlife"),
     CompanyConfig(name="Stacklok", provider=ATSProvider.GREENHOUSE, board_token="stacklok"),
     CompanyConfig(name="Loft Orbital", provider=ATSProvider.LEVER, board_token="loftorbital"),
     CompanyConfig(name="TTC", provider=ATSProvider.GREENHOUSE, board_token="ttcglobal"),

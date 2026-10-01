@@ -335,6 +335,29 @@ def test_resolve_effective_apply_url() -> None:
     assert eff_url == "https://boards.greenhouse.io/stripe/jobs/123"
     assert label == "Apply on ATS"
 
+    # 4. MetLife official careers portal lookup
+    assert resolve_company_career_portal("MetLife") == "https://www.metlifecareers.com"
+
+    # 5. Direct LinkedIn job opening link is preserved
+    linkedin_job = {
+        "company": "MetLife",
+        "title": "Software Engineer I",
+        "apply_url": "https://www.linkedin.com/jobs/view/4458281479/",
+    }
+    eff_url, _, label = resolve_effective_apply_url(linkedin_job)
+    assert eff_url == "https://www.linkedin.com/jobs/view/4458281479/"
+    assert label == "Apply on LinkedIn"
+
+    # 6. Generic LinkedIn search URL falls back to company careers portal
+    generic_search_job = {
+        "company": "MetLife",
+        "title": "Software Engineer I",
+        "apply_url": "https://www.linkedin.com/jobs/search?keywords=metlife",
+    }
+    eff_url, _, label = resolve_effective_apply_url(generic_search_job)
+    assert eff_url == "https://www.metlifecareers.com"
+    assert label == "Official Careers Portal"
+
 
 @pytest.mark.asyncio
 async def test_telegram_notification_bypasses_glassdoor() -> None:
