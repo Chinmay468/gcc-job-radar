@@ -18,11 +18,10 @@ DEFAULT_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
 
 def get_builder_script_path() -> Optional[Path]:
-    """Resolve the path to resume_tailor.py in the builder submodule or local projects."""
+    """Resolve the path to resume_tailor.py in the builder directory."""
     candidates = [
         Path("builder/resume_tailor.py"),
         Path(__file__).resolve().parent.parent / "builder" / "resume_tailor.py",
-        Path("D:/Projects/Resume Builder/resume_tailor.py"),
     ]
     for p in candidates:
         if p.is_file():
@@ -31,7 +30,7 @@ def get_builder_script_path() -> Optional[Path]:
 
 
 def get_master_resume_path() -> Optional[Path]:
-    """Resolve master_resume.tex from environment or builder repository."""
+    """Resolve master_resume.tex from environment or builder directory."""
     env_path = os.getenv("MASTER_RESUME_PATH")
     if env_path and Path(env_path).is_file():
         return Path(env_path).resolve()
@@ -40,7 +39,6 @@ def get_master_resume_path() -> Optional[Path]:
         Path("master_resume.tex"),
         Path("builder/master_resume.tex"),
         Path(__file__).resolve().parent.parent / "builder" / "master_resume.tex",
-        Path("D:/Projects/Resume Builder/master_resume.tex"),
     ]
     for p in candidates:
         if p.is_file():
