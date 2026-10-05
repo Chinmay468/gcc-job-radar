@@ -89,11 +89,27 @@
       "company": "Metlife",
       "title": "Associate Data Analyst",
       "apply_url": "https://jobs.lever.co/metlife"
+    },
+    {
+      "id": "chrome_dunbar___boardman__uk__graduate_engineer",
+      "company": "Dunbar & Boardman (UK)",
+      "title": "Graduate Engineer",
+      "apply_url": "https://www.linkedin.com/jobs/view/4472927867/"
+    },
+    {
+      "id": "manual_duck_creek_1791214749010",
+      "company": "Duck Creek",
+      "title": "All Roles",
+      "apply_url": "https://www.google.com/search?q=Duck+Creek+All+Roles+careers"
     }
   ],
   "dismissed_companies": [
     "Fampay",
     "EMEA \u2013 gitlab \u2013 Remote | Remote | Arbeitnow",
-    "Schwerpunkt Angular \u2013 isento GmbH \u2013 Nuremberg | Arbeitnow"
+    "Schwerpunkt Angular \u2013 isento GmbH \u2013 Nuremberg | Arbeitnow",
+    "Dunbar",
+    "Boardman (UK)",
+    "Dunbar & Boardman (UK)",
+    "Duck Creek"
   ]
 }

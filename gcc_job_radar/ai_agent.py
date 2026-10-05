@@ -1628,6 +1628,11 @@ async def _fallback_response(
                 ("applied", "apply"),
                 ("apply", "apply"),
                 ("dismiss", "dismiss"),
+                ("dimsiss", "dismiss"),
+                ("dimiss", "dismiss"),
+                ("dissmiss", "dismiss"),
+                ("dismis", "dismiss"),
+                ("dsmiss", "dismiss"),
                 ("hide", "dismiss"),
                 ("restore", "restore"),
                 ("undismiss", "restore"),
@@ -2153,7 +2158,7 @@ async def _call_groq(
 ) -> Optional[str]:
     """Call Groq REST API using high-performance open models (e.g. openai/gpt-oss-120b)."""
     base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    model = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
     return await _call_openai_compatible(
         prompt=prompt,
         history=history,

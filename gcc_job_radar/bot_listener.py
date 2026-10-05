@@ -645,7 +645,7 @@ async def handle_command(
             client,
         )
 
-    elif cmd in ("/dismiss", "/hide"):
+    elif cmd in ("/dismiss", "/hide", "/dimsiss", "/dimiss", "/dissmiss", "/dismis", "/dsmiss"):
         if not arg:
             await send_telegram_reply(
                 bot_token,
@@ -1603,14 +1603,14 @@ async def dispatch_single_update(
                 )
                 return
 
-            # Fast-path 4: Natural language dismiss / hide
+            # Fast-path 4: Natural language dismiss / hide (with typo tolerance)
             m_nl_dismiss = re.match(
-                r"^(?:please\s+)?(?:dismiss|hide|ignore|remove|drop)\s+(.+)$",
+                r"^(?:please\s+)?(?:dismiss|dimsiss|dimiss|dissmiss|dismis|dsmiss|hide|ignore|remove|drop)\s+(.+)$",
                 raw_lower,
             )
             if m_nl_dismiss:
                 dismiss_target = re.sub(
-                    r"^(?:please\s+)?(?:dismiss|hide|ignore|remove|drop)\s+",
+                    r"^(?:please\s+)?(?:dismiss|dimsiss|dimiss|dissmiss|dismis|dsmiss|hide|ignore|remove|drop)\s+",
                     "",
                     raw_msg,
                     flags=re.IGNORECASE,
