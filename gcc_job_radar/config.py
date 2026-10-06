@@ -5853,6 +5853,8 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="TantranZm", provider=ATSProvider.CUSTOM, board_token="tantranzm", career_url="https://www.google.com/search?q=%22TantranZm%22+%22software+engineer%22+careers+jobs+apply"),
     CompanyConfig(name="Cushman & Wakefield", provider=ATSProvider.CUSTOM, board_token="cushman&wakefield", career_url="https://www.google.com/search?q=%22Cushman+%26+Wakefield%22+%22software+engineer%22+careers+jobs+apply"),
     CompanyConfig(name="Thakor Electronics", provider=ATSProvider.CUSTOM, board_token="thakorelectronics", career_url="https://www.google.com/search?q=%22Thakor+Electronics%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="TravClan", provider=ATSProvider.CUSTOM, board_token="travclan", career_url="https://www.google.com/search?q=%22TravClan%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Duck Creek Technologies", provider=ATSProvider.CUSTOM, board_token="duckcreektechnologies", career_url="https://www.google.com/search?q=%22Duck+Creek+Technologies%22+%22software+engineer%22+careers+jobs+apply"),
 ]
 
 # Strict entry-level tech title positive pattern

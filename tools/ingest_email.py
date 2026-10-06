@@ -636,6 +636,15 @@ def parse_acciojob_alert_html(
     seen_keys: set[tuple[str, str]] = set()
 
     subj_clean = clean_text_punctuation(subject)
+    sender_l = (sender or "").lower()
+    subj_l = (subj_clean or "").lower()
+
+    is_accio = any(k in sender_l for k in ("acciojob", "acciomatrix")) or any(k in subj_l for k in ("acciojob", "acciomatrix"))
+    is_assessment = "assessment" in subj_l or "assessment link" in html_content[:2000].lower()
+
+    # Fast guard: AccioJob parser should only execute on AccioJob emails or explicit assessment links
+    if not (is_accio or is_assessment):
+        return []
 
     # 1. Skip non-job messages (OTP codes, password resets, verification)
     if re.search(r"\b(otp|verification\s*code|reset\s*password|login\s*code)\b", subj_clean, re.I):
@@ -644,20 +653,22 @@ def parse_acciojob_alert_html(
     # 2. Case A: Assessment Invitation Email
     # e.g. Subject: "Assessment Link for GoComet | Full Stack Developer Intern | Slot 1st"
     # Or: "GoComet | Full Stack Developer Intern | Slot 1 Assessment Link"
-    m_assess = re.search(
-        r"(?:Assessment\s+Link\s+for\s+)?(?P<comp>[^|]+?)\s*\|\s*(?P<role>[^|]+?)(?:\s*\|\s*(?P<extra>.*))?$",
-        subj_clean,
-        re.I,
-    )
-    if not m_assess:
-        # Check inside HTML <title>
-        m_title = re.search(
-            r"<title>(?:Assessment\s+Link\s+for\s+)?(?P<comp>[^|]+?)\s*\|\s*(?P<role>[^|<]+?)(?:\s*\|\s*[^<]*)?</title>",
-            html_content,
+    m_assess = None
+    if is_assessment or "slot" in subj_l or is_accio:
+        m_assess = re.search(
+            r"(?:Assessment\s+Link\s+for\s+)?(?P<comp>[^|]+?)\s*\|\s*(?P<role>[^|]+?)(?:\s*\|\s*(?P<extra>.*))?$",
+            subj_clean,
             re.I,
         )
-        if m_title:
-            m_assess = m_title
+        if not m_assess:
+            # Check inside HTML <title>
+            m_title = re.search(
+                r"<title>(?:Assessment\s+Link\s+for\s+)?(?P<comp>[^|]+?)\s*\|\s*(?P<role>[^|<]+?)(?:\s*\|\s*[^<]*)?</title>",
+                html_content[:3000],
+                re.I,
+            )
+            if m_title and (is_accio or "assessment" in m_title.group(0).lower()):
+                m_assess = m_title
 
     if m_assess:
         comp_candidate = clean_text_punctuation(m_assess.group("comp"))
@@ -710,6 +721,9 @@ def parse_acciojob_alert_html(
                 )
 
     # 3. Case B: Curated Partner Listings / Digest Tables
+    # Only run table parsing if the email is actually an AccioJob partner digest email
+    if not is_accio and "acciojob" not in html_content[:3000].lower():
+        return jobs
     # Pattern 1: TSV / Text table (Company\tRole\t\nSkills\nDate\tSource)
     table_pattern = re.compile(
         r"([^\t\n\r]+)\t([^\t\n\r]+)\t\s*\n([\s\S]*?)\n([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})\t([^\t\n\r]+)\t?",
@@ -796,32 +810,44 @@ def parse_email_alert_html(
     subject: str = "",
 ) -> list[RawParsedJob]:
     """Route email HTML to appropriate parser based on sender/subject and combine findings."""
-    sender_lower = sender.lower()
+    sender_lower = (sender or "").lower()
+    subject_lower = (subject or "").lower()
     jobs: list[RawParsedJob] = []
 
     # 1. Platform-specific parser based on sender
+    is_known_platform = False
     if "linkedin" in sender_lower:
+        is_known_platform = True
         jobs.extend(parse_linkedin_alert_html(html_content))
     elif "naukri" in sender_lower:
+        is_known_platform = True
         jobs.extend(parse_naukri_alert_html(html_content))
     elif "indeed" in sender_lower:
+        is_known_platform = True
         jobs.extend(parse_indeed_alert_html(html_content))
     elif "glassdoor" in sender_lower:
+        is_known_platform = True
         jobs.extend(parse_glassdoor_alert_html(html_content))
-    elif "acciojob" in sender_lower or "acciomatrix" in sender_lower or "acciojob" in subject.lower():
+    elif "acciojob" in sender_lower or "acciomatrix" in sender_lower or "acciojob" in subject_lower:
+        is_known_platform = True
         jobs.extend(parse_acciojob_alert_html(html_content, sender=sender, subject=subject))
 
-    # 2. If no jobs found, attempt schema.org json-ld
+    # 2. If no jobs found, attempt schema.org json-ld (standard across all platforms)
     if not jobs:
         jobs.extend(parse_schema_org_json_ld(html_content))
 
-    # 3. Fallback: try all parsers if specific sender didn't match or produced 0 jobs
-    if not jobs:
+    # 3. Fallback: only try other parsers if sender was NOT a recognized platform
+    # (If sender is clearly Indeed or LinkedIn, running other parsers is wasteful and risks false positives/hangs)
+    if not jobs and not is_known_platform:
         jobs.extend(parse_linkedin_alert_html(html_content))
-        jobs.extend(parse_naukri_alert_html(html_content))
-        jobs.extend(parse_indeed_alert_html(html_content))
-        jobs.extend(parse_glassdoor_alert_html(html_content))
-        jobs.extend(parse_acciojob_alert_html(html_content, sender=sender, subject=subject))
+        if not jobs:
+            jobs.extend(parse_naukri_alert_html(html_content))
+        if not jobs:
+            jobs.extend(parse_indeed_alert_html(html_content))
+        if not jobs:
+            jobs.extend(parse_glassdoor_alert_html(html_content))
+        if not jobs and ("accio" in sender_lower or "assessment" in subject_lower):
+            jobs.extend(parse_acciojob_alert_html(html_content, sender=sender, subject=subject))
 
     return jobs
 
@@ -1019,7 +1045,7 @@ def fetch_unread_alert_emails(
     results: list[tuple[str, EmailMessage]] = []
 
     try:
-        status, _ = imap_client.select(folder)
+        status, _ = imap_client.select(folder, readonly=not mark_read)
         if status != "OK":
             console.print(f"[bold red]Error:[/bold red] Could not select mailbox folder '{folder}'")
             return []
@@ -1131,6 +1157,9 @@ def fetch_unread_alert_emails(
         if owns_client and imap_client:
             try:
                 imap_client.close()
+            except Exception:
+                pass
+            try:
                 imap_client.logout()
             except Exception:
                 pass

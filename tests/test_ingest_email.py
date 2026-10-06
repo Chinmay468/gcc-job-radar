@@ -617,7 +617,7 @@ def test_fetch_unread_alert_emails_with_mock_client(tmp_path: Path):
     )
 
     assert len(results) == 2
-    mock_imap.select.assert_called_with("INBOX")
+    mock_imap.select.assert_called_with("INBOX", readonly=True)
     # UID SEARCH was called
     search_calls = [c for c in mock_imap.uid.call_args_list if c[0][0] == "SEARCH"]
     assert len(search_calls) > 0
@@ -1060,5 +1060,36 @@ def test_parse_email_alert_html_routes_acciojob():
     assert len(jobs) == 1
     assert jobs[0].company == "TechCorp"
     assert jobs[0].title == "SDE 1 Intern"
+
+
+def test_parse_email_alert_html_does_not_fall_through_to_acciojob_for_indeed():
+    """Verify an Indeed email with no valid job cards does not falsely match AccioJob parser or hang."""
+    from tools.ingest_email import parse_email_alert_html
+    import time
+
+    # Large nested HTML email with title with pipe
+    nested_html = "<html><head><title>Senior Architect | Indeed</title></head><body>" + "<div><table><tr><td>Some promo</td></tr></table></div>" * 500 + "</body></html>"
+    t0 = time.perf_counter()
+    jobs = parse_email_alert_html(
+        nested_html,
+        sender="donotreply@match.indeed.com",
+        subject="Jobs you may like | Indeed",
+    )
+    duration = time.perf_counter() - t0
+    assert jobs == []
+    assert duration < 0.2, f"Indeed parsing took too long: {duration:.3f}s"
+
+
+def test_parse_acciojob_alert_html_fast_bailout_on_unrelated():
+    """Verify parse_acciojob_alert_html immediately bails out on unrelated emails."""
+    from tools.ingest_email import parse_acciojob_alert_html
+
+    jobs = parse_acciojob_alert_html(
+        "<html><body>Just a normal newsletter</body></html>",
+        sender="newsletter@medium.com",
+        subject="Weekly digest",
+    )
+    assert jobs == []
+
 
 

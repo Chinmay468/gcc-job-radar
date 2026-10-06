@@ -80,6 +80,7 @@ def get_memory_usage_mb() -> float:
 
 class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
     """HTTP Request Handler serving health checks for Render keep-alive monitors."""
+    timeout = 5.0  # Socket timeout in seconds to prevent stalled connections
 
     def _send_response_payload(self, status: int, data: dict, write_body: bool = True) -> None:
         payload = json.dumps(data).encode("utf-8")
@@ -115,9 +116,14 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         return
 
 
-def start_http_server(host: str = "0.0.0.0", port: int = 10000) -> http.server.HTTPServer:
-    """Start the HTTP server on a daemon background thread."""
-    server = http.server.HTTPServer((host, port), HealthCheckHandler)
+class ThreadingHealthCheckServer(http.server.ThreadingHTTPServer):
+    daemon_threads = True
+    timeout = 10.0
+
+
+def start_http_server(host: str = "0.0.0.0", port: int = 10000) -> http.server.ThreadingHTTPServer:
+    """Start the multi-threaded HTTP server on a daemon background thread."""
+    server = ThreadingHealthCheckServer((host, port), HealthCheckHandler)
     server_thread = threading.Thread(
         target=server.serve_forever,
         name="render-health-server",
