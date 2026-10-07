@@ -189,7 +189,7 @@ function setupEventListeners() {
   }
 
   if (btnOutreach) {
-    btnOutreach.addEventListener("click", handleGenerateOutreach);
+    btnOutreach.addEventListener("click", () => handleGenerateOutreach());
   }
 
   if (btnSearchRecruiters) {
@@ -227,15 +227,15 @@ function setupEventListeners() {
   }
 
   if (btnCopyOutreach) {
-    btnCopyOutreach.addEventListener("click", handleCopyOutreach);
+    btnCopyOutreach.addEventListener("click", () => handleCopyOutreach());
   }
   if (btnCopySubject) {
-    btnCopySubject.addEventListener("click", handleCopySubject);
+    btnCopySubject.addEventListener("click", () => handleCopySubject());
   }
 
   // Phase 4 Listeners
   if (btnAutofill) {
-    btnAutofill.addEventListener("click", handleAutofillForm);
+    btnAutofill.addEventListener("click", () => handleAutofillForm());
   }
 
   if (btnCloseScreening) {
@@ -275,11 +275,11 @@ function setupEventListeners() {
   }
 
   if (btnCopyScreening) {
-    btnCopyScreening.addEventListener("click", handleCopyScreeningAnswer);
+    btnCopyScreening.addEventListener("click", () => handleCopyScreeningAnswer());
   }
 
   if (btnInsertScreening) {
-    btnInsertScreening.addEventListener("click", handleInsertScreeningAnswer);
+    btnInsertScreening.addEventListener("click", () => handleInsertScreeningAnswer());
   }
 
   if (btnTabSwitchLoad) {
