@@ -35,7 +35,28 @@ const btnTabSwitchLoad = document.getElementById("btn-tab-switch-load");
 
 const btnEvaluate = document.getElementById("btn-evaluate");
 const btnTailor = document.getElementById("btn-tailor");
+const btnOutreach = document.getElementById("btn-outreach");
 const btnDismissMain = document.getElementById("btn-dismiss-main");
+
+// Outreach Studio DOM Elements (Phase 3)
+const outreachCard = document.getElementById("outreach-card");
+const btnSearchRecruiters = document.getElementById("btn-search-recruiters");
+const tabOutreachLinkedin = document.getElementById("tab-outreach-linkedin");
+const tabOutreachEmail = document.getElementById("tab-outreach-email");
+const tabOutreachReferral = document.getElementById("tab-outreach-referral");
+const audiencePills = document.querySelectorAll(".audience-pill");
+const outreachSubjectRow = document.getElementById("outreach-subject-row");
+const outreachSubjectInput = document.getElementById("outreach-subject-input");
+const btnCopySubject = document.getElementById("btn-copy-subject");
+const outreachBodyTextarea = document.getElementById("outreach-body-textarea");
+const outreachCharCount = document.getElementById("outreach-char-count");
+const btnCopyOutreach = document.getElementById("btn-copy-outreach");
+const copyOutreachIcon = document.getElementById("copy-outreach-icon");
+const copyOutreachText = document.getElementById("copy-outreach-text");
+
+let currentOutreachData = null;
+let currentOutreachFormat = "linkedin";
+let currentAudience = "recruiter";
 
 const loadingCard = document.getElementById("loading-card");
 const loadingText = document.getElementById("loading-text");
@@ -148,15 +169,62 @@ function setupEventListeners() {
     });
   }
 
+  if (btnOutreach) {
+    btnOutreach.addEventListener("click", handleGenerateOutreach);
+  }
+
+  if (btnSearchRecruiters) {
+    btnSearchRecruiters.addEventListener("click", (e) => {
+      e.preventDefault();
+      const comp = inputCompany.value.trim() || "Technology";
+      const searchUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(comp + " recruiter")}`;
+      openUrlInTab(searchUrl);
+    });
+  }
+
+  if (outreachBodyTextarea) {
+    outreachBodyTextarea.addEventListener("input", updateOutreachCharCount);
+  }
+
+  if (tabOutreachLinkedin) {
+    tabOutreachLinkedin.addEventListener("click", () => switchOutreachFormat("linkedin"));
+  }
+  if (tabOutreachEmail) {
+    tabOutreachEmail.addEventListener("click", () => switchOutreachFormat("email"));
+  }
+  if (tabOutreachReferral) {
+    tabOutreachReferral.addEventListener("click", () => switchOutreachFormat("referral"));
+  }
+
+  if (audiencePills && audiencePills.length > 0) {
+    audiencePills.forEach((pill) => {
+      pill.addEventListener("click", async () => {
+        audiencePills.forEach((p) => p.classList.remove("active"));
+        pill.classList.add("active");
+        currentAudience = pill.getAttribute("data-audience") || "recruiter";
+        await handleGenerateOutreach();
+      });
+    });
+  }
+
+  if (btnCopyOutreach) {
+    btnCopyOutreach.addEventListener("click", handleCopyOutreach);
+  }
+  if (btnCopySubject) {
+    btnCopySubject.addEventListener("click", handleCopySubject);
+  }
+
   if (btnTabSwitchLoad) {
     btnTabSwitchLoad.addEventListener("click", async () => {
       if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
       currentEvaluation = null;
+      currentOutreachData = null;
       inputCompany.value = "";
       inputTitle.value = "";
       inputJd.value = "";
       if (companyIntelligenceBar) companyIntelligenceBar.classList.add("hidden");
       evalCard.classList.add("hidden");
+      if (outreachCard) outreachCard.classList.add("hidden");
       tailorCard.classList.add("hidden");
       await loadJobFromActiveTab();
     });
@@ -279,6 +347,9 @@ async function loadJobFromActiveTab() {
 // 2b. Lookup Company Radar Intelligence & Direct ATS Portal (Phase 2)
 async function lookupAndRenderCompany(company, title, url) {
   if (!company || !companyIntelligenceBar) return;
+  if (btnSearchRecruiters) {
+    btnSearchRecruiters.href = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company + " recruiter")}`;
+  }
   try {
     const queryUrl = `${BRIDGE_URL}/lookup_company?company=${encodeURIComponent(company)}&title=${encodeURIComponent(title || "")}&url=${encodeURIComponent(url || currentActiveUrl || "")}`;
     const res = await fetch(queryUrl, { method: "GET" });
@@ -823,3 +894,180 @@ function showLoading(msg) {
 function hideLoading() {
   loadingCard.classList.add("hidden");
 }
+
+// 9. Recruiter Outreach & InMail Studio (Phase 3)
+async function handleGenerateOutreach() {
+  const jd_text = inputJd.value.trim();
+  const company = inputCompany.value.trim() || "Target Company";
+  const role = inputTitle.value.trim() || "Software Engineer";
+
+  if (!jd_text && !company) {
+    alert("Please provide either a Job Description or Company Name to generate tailored outreach.");
+    return;
+  }
+
+  // Update recruiter search link on LinkedIn
+  if (btnSearchRecruiters) {
+    btnSearchRecruiters.href = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company + " recruiter")}`;
+  }
+
+  showLoading(`Generating personalized ${currentAudience.replace("_", " ")} outreach...`);
+
+  try {
+    const matched_skills = (currentEvaluation && currentEvaluation.matched_skills) ? currentEvaluation.matched_skills : [];
+
+    const res = await fetch(`${BRIDGE_URL}/generate_outreach`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        company: company,
+        title: role,
+        jd_text: jd_text,
+        matched_skills: matched_skills,
+        recipient_type: currentAudience,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    currentOutreachData = data;
+
+    renderOutreachView();
+
+    if (outreachCard) {
+      outreachCard.classList.remove("hidden");
+      outreachCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  } catch (err) {
+    alert(`Failed to generate outreach: ${err.message}\nMake sure the local bridge is running.`);
+  } finally {
+    hideLoading();
+  }
+}
+
+function switchOutreachFormat(format) {
+  currentOutreachFormat = format;
+
+  if (tabOutreachLinkedin) tabOutreachLinkedin.classList.toggle("active", format === "linkedin");
+  if (tabOutreachEmail) tabOutreachEmail.classList.toggle("active", format === "email");
+  if (tabOutreachReferral) tabOutreachReferral.classList.toggle("active", format === "referral");
+
+  renderOutreachView();
+}
+
+function renderOutreachView() {
+  if (!currentOutreachData) return;
+
+  const data = currentOutreachData;
+
+  // Toggle Subject row (only relevant for email / inmail)
+  if (currentOutreachFormat === "email") {
+    if (outreachSubjectRow) outreachSubjectRow.classList.remove("hidden");
+    if (outreachSubjectInput) {
+      outreachSubjectInput.value = (data.cold_email && data.cold_email.subject) ? data.cold_email.subject : "";
+    }
+  } else {
+    if (outreachSubjectRow) outreachSubjectRow.classList.add("hidden");
+  }
+
+  // Populate message body
+  let text = "";
+  if (currentOutreachFormat === "linkedin") {
+    text = data.linkedin_connection_note || "";
+  } else if (currentOutreachFormat === "email") {
+    text = (data.cold_email && data.cold_email.body) ? data.cold_email.body : "";
+  } else if (currentOutreachFormat === "referral") {
+    text = data.referral_request || "";
+  }
+
+  if (outreachBodyTextarea) {
+    outreachBodyTextarea.value = text;
+  }
+
+  updateOutreachCharCount();
+
+  // Reset copy button state
+  if (copyOutreachIcon) copyOutreachIcon.textContent = "📋";
+  if (copyOutreachText) {
+    copyOutreachText.textContent = currentOutreachFormat === "linkedin" ? "Copy Note" : "Copy Message";
+  }
+}
+
+function updateOutreachCharCount() {
+  if (!outreachCharCount || !outreachBodyTextarea) return;
+  const len = outreachBodyTextarea.value.length;
+
+  if (currentOutreachFormat === "linkedin") {
+    outreachCharCount.textContent = `${len} / 300 chars`;
+    if (len > 300) {
+      outreachCharCount.className = "outreach-char-count char-exceed";
+    } else if (len >= 270) {
+      outreachCharCount.className = "outreach-char-count char-warn";
+    } else {
+      outreachCharCount.className = "outreach-char-count char-ok";
+    }
+  } else {
+    outreachCharCount.textContent = `${len} chars`;
+    outreachCharCount.className = "outreach-char-count char-ok";
+  }
+}
+
+async function handleCopyOutreach() {
+  if (!outreachBodyTextarea) return;
+  const text = outreachBodyTextarea.value;
+  if (!text) {
+    alert("No message to copy.");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    if (copyOutreachIcon) copyOutreachIcon.textContent = "✅";
+    if (copyOutreachText) copyOutreachText.textContent = "Copied!";
+    setTimeout(() => {
+      if (copyOutreachIcon) copyOutreachIcon.textContent = "📋";
+      if (copyOutreachText) {
+        copyOutreachText.textContent = currentOutreachFormat === "linkedin" ? "Copy Note" : "Copy Message";
+      }
+    }, 2000);
+  } catch (err) {
+    // Fallback copy
+    outreachBodyTextarea.select();
+    document.execCommand("copy");
+    if (copyOutreachIcon) copyOutreachIcon.textContent = "✅";
+    if (copyOutreachText) copyOutreachText.textContent = "Copied!";
+    setTimeout(() => {
+      if (copyOutreachIcon) copyOutreachIcon.textContent = "📋";
+      if (copyOutreachText) {
+        copyOutreachText.textContent = currentOutreachFormat === "linkedin" ? "Copy Note" : "Copy Message";
+      }
+    }, 2000);
+  }
+}
+
+async function handleCopySubject() {
+  if (!outreachSubjectInput) return;
+  const text = outreachSubjectInput.value;
+  if (!text) return;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    const originalText = btnCopySubject ? btnCopySubject.textContent : "Copy";
+    if (btnCopySubject) btnCopySubject.textContent = "Copied!";
+    setTimeout(() => {
+      if (btnCopySubject) btnCopySubject.textContent = originalText;
+    }, 1500);
+  } catch (err) {
+    outreachSubjectInput.select();
+    document.execCommand("copy");
+    if (btnCopySubject) btnCopySubject.textContent = "Copied!";
+    setTimeout(() => {
+      if (btnCopySubject) btnCopySubject.textContent = "Copy";
+    }, 1500);
+  }
+}
+

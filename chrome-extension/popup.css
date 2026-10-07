@@ -613,9 +613,20 @@ textarea:focus {
 
 .button-group {
   display: grid;
-  grid-template-columns: 1.15fr 1.35fr 1fr;
-  gap: 8px;
+  grid-template-columns: 1.05fr 0.9fr 1fr 0.9fr;
+  gap: 6px;
   margin-top: 2px;
+}
+
+.btn-outreach {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #c7d2fe;
+}
+.btn-outreach:hover {
+  background: rgba(99, 102, 241, 0.24);
+  border-color: rgba(99, 102, 241, 0.6);
+  color: #ffffff;
 }
 
 .btn {
@@ -1160,6 +1171,196 @@ textarea:focus {
   color: #94a3b8;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* ==========================================================================
+   Recruiter Outreach Studio (Phase 3)
+   ========================================================================== */
+
+.outreach-card {
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 10px 32px -4px rgba(0, 0, 0, 0.5), 0 0 20px -4px rgba(99, 102, 241, 0.15);
+}
+
+.search-recruiters-link {
+  color: #38bdf8;
+  font-size: 11px;
+}
+
+.outreach-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.outreach-type-tabs {
+  display: flex;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.outreach-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 5px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.outreach-tab:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.outreach-tab.active {
+  background: rgba(99, 102, 241, 0.25);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.outreach-audience-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audience-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.audience-pill-group {
+  display: flex;
+  gap: 5px;
+}
+
+.audience-pill {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2.5px 8px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.audience-pill:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.audience-pill.active {
+  background: rgba(14, 165, 233, 0.18);
+  border-color: rgba(56, 189, 248, 0.45);
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.outreach-display-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(11, 19, 41, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+
+.outreach-subject-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.outreach-subject-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  width: 48px;
+}
+
+.subject-input-wrap {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+}
+
+#outreach-subject-input {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #e2e8f0;
+  outline: none;
+}
+
+.btn-copy-mini {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 10px;
+  cursor: pointer;
+  color: #cbd5e1;
+}
+
+.outreach-body-wrap textarea {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  color: #f1f5f9;
+  font-size: 11.5px;
+  line-height: 1.45;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.outreach-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.outreach-char-count {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: monospace;
+}
+
+.outreach-char-count.char-ok {
+  color: #34d399;
+}
+
+.outreach-char-count.char-warn {
+  color: #fbbf24;
+}
+
+.outreach-char-count.char-exceed {
+  color: #f87171;
+  font-weight: bold;
+}
+
+.btn-copy-outreach {
+  height: 32px;
+  font-size: 11.5px;
+  padding: 0 12px;
 }
 
 /* ==========================================================================

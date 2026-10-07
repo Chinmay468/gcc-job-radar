@@ -182,6 +182,8 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.handle_record_job()
         elif path == "/dismiss":
             self.handle_dismiss()
+        elif path == "/generate_outreach":
+            self.handle_generate_outreach()
         else:
             self._send_json(404, {"error": "Not Found", "path": path})
 
@@ -642,6 +644,29 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             logger.error(f"Company resolution error for '{company}': {e}", exc_info=True)
             self._send_json(500, {"error": str(e), "found": False})
+
+    def handle_generate_outreach(self):
+        """Generates cold outreach messages (LinkedIn note, cold email, referral request)."""
+        body = self._read_json_body()
+        company = body.get("company", "").strip() or "Company"
+        role = body.get("title", "") or body.get("role", "") or "Software Engineer"
+        jd_text = body.get("jd_text", "").strip()
+        matched_skills = body.get("matched_skills", [])
+        recipient_type = body.get("recipient_type", "recruiter").strip()
+
+        try:
+            from tools.outreach_generator import generate_all_outreach
+            res = generate_all_outreach(
+                company=company,
+                role=role,
+                jd_text=jd_text,
+                detected_skills=matched_skills,
+                recipient_type=recipient_type,
+            )
+            self._send_json(200, res)
+        except Exception as e:
+            logger.error(f"Outreach generation error: {e}", exc_info=True)
+            self._send_json(500, {"error": str(e), "success": False})
 
 
 class ThreadingBridgeServer(socketserver.ThreadingTCPServer):

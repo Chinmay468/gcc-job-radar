@@ -145,7 +145,10 @@
           <span class="btn-icon">⚡</span> <span>Evaluate Fit</span>
         </button>
         <button id="btn-tailor" class="btn btn-primary btn-tailor" title="Tailor resume bullets & compile PDF with local Tectonic engine">
-          <span class="btn-icon">✨</span> <span>Tailor Resume</span>
+          <span class="btn-icon">✨</span> <span>Tailor</span>
+        </button>
+        <button id="btn-outreach" class="btn btn-secondary btn-outreach" title="Generate tailored recruiter InMail, LinkedIn note & cold outreach">
+          <span class="btn-icon">✉️</span> <span>Outreach</span>
         </button>
         <button id="btn-dismiss-main" class="btn btn-danger-outline btn-dismiss" title="Dismiss this job & company from radar">
           <span class="btn-icon">🗑️</span> <span>Dismiss</span>
@@ -223,6 +226,72 @@
 
       <div id="warnings-container" class="flags-block hidden">
         <ul id="warnings-list" class="flags-list warnings"></ul>
+      </div>
+    </section>
+
+    <!-- Recruiter Outreach & InMail Studio (Phase 3) -->
+    <section id="outreach-card" class="card outreach-card hidden">
+      <div class="card-header">
+        <div class="outreach-header-title">
+          <span class="card-title">
+            <span class="card-title-icon">✉️</span> Recruiter Outreach
+          </span>
+          <span class="badge-v">1-Click</span>
+        </div>
+        <div class="card-header-actions">
+          <a id="btn-search-recruiters" class="btn-text search-recruiters-link" href="#" target="_blank" title="Find recruiters for this company on LinkedIn">
+            🔍 Find Recruiters on LinkedIn ↗
+          </a>
+        </div>
+      </div>
+
+      <!-- Outreach Format Tabs -->
+      <div class="outreach-controls">
+        <div class="outreach-type-tabs">
+          <button id="tab-outreach-linkedin" class="outreach-tab active" data-type="linkedin" type="button">
+            🤝 LinkedIn (<300c)
+          </button>
+          <button id="tab-outreach-email" class="outreach-tab" data-type="email" type="button">
+            📧 Cold Email / InMail
+          </button>
+          <button id="tab-outreach-referral" class="outreach-tab" data-type="referral" type="button">
+            ☕ Referral Request
+          </button>
+        </div>
+
+        <div class="outreach-audience-row">
+          <span class="audience-label">Audience:</span>
+          <div class="audience-pill-group">
+            <button class="audience-pill active" data-audience="recruiter" type="button">Recruiter / HR</button>
+            <button class="audience-pill" data-audience="hiring_manager" type="button">Hiring Manager</button>
+            <button class="audience-pill" data-audience="peer_engineer" type="button">Team Engineer</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Outreach Message Display Area -->
+      <div class="outreach-display-box">
+        <!-- Subject row for email mode -->
+        <div id="outreach-subject-row" class="outreach-subject-row hidden">
+          <label class="outreach-subject-label">Subject:</label>
+          <div class="subject-input-wrap">
+            <input type="text" id="outreach-subject-input" readonly>
+            <button id="btn-copy-subject" class="btn-text btn-copy-mini" type="button" title="Copy Subject">Copy</button>
+          </div>
+        </div>
+
+        <div class="outreach-body-wrap">
+          <textarea id="outreach-body-textarea" rows="6" readonly></textarea>
+        </div>
+
+        <div class="outreach-meta-row">
+          <span id="outreach-char-count" class="outreach-char-count">0 / 300 chars</span>
+          <div class="outreach-actions-right">
+            <button id="btn-copy-outreach" class="btn btn-primary btn-copy-outreach" type="button">
+              <span id="copy-outreach-icon">📋</span> <span id="copy-outreach-text">Copy Note</span>
+            </button>
+          </div>
+        </div>
       </div>
     </section>
 
