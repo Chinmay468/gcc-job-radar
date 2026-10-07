@@ -183,11 +183,92 @@ function extractGeneric() {
   };
 }
 
+function extractFromAshby() {
+  // Check JSON-LD first for crisp structured data
+  const jsonLd = extractJsonLd();
+  if (jsonLd && jsonLd.jd_text && jsonLd.jd_text.length > 100) {
+    if (!jsonLd.company) {
+      const match = window.location.pathname.match(/\/([^\/]+)\/[a-f0-9\-]+/i) ||
+                    window.location.hostname.match(/([a-zA-Z0-9_\-]+)\.ashbyhq\.com/i);
+      if (match) jsonLd.company = match[1].replace(/[-_]/g, " ");
+    }
+    return jsonLd;
+  }
+
+  const titleEl = document.querySelector(
+    "h1.ashby-job-posting-heading, h1, [class*='JobPostingHeading'], [class*='heading_'], [class*='jobTitle']"
+  );
+  const companyEl = document.querySelector(
+    ".ashby-job-posting-company-name, [class*='companyName'], [class*='CompanyHeader'], header img[alt]"
+  );
+  const descEl = document.querySelector(
+    ".ashby-job-posting-description, [class*='JobPostingDescription'], [class*='description_'], [data-testid='job-description'], main"
+  );
+
+  let company = "";
+  if (companyEl) {
+    company = (companyEl.innerText || companyEl.getAttribute("alt") || "").trim();
+  }
+  if (!company) {
+    const match = window.location.pathname.match(/\/([^\/]+)\/[a-f0-9\-]+/i) ||
+                  window.location.hostname.match(/([a-zA-Z0-9_\-]+)\.ashbyhq\.com/i);
+    if (match) company = match[1].replace(/[-_]/g, " ");
+  }
+
+  return {
+    title: titleEl ? titleEl.innerText.trim() : "",
+    company: company,
+    jd_text: descEl ? cleanText(descEl.innerText) : "",
+  };
+}
+
+function extractFromInstahyre() {
+  const titleEl = document.querySelector(".job-title, h1, .profile-info h1, [class*='job-header'] h1");
+  const companyEl = document.querySelector(".employer-name, .company-name, a.employer, [class*='employer']");
+  const descEl = document.querySelector(".job-description, .description-content, #job-description, .profile-description, [class*='job-description']");
+
+  return {
+    title: titleEl ? titleEl.innerText.trim() : "",
+    company: companyEl ? companyEl.innerText.trim() : "",
+    jd_text: descEl ? cleanText(descEl.innerText) : "",
+  };
+}
+
+function extractJsonLd() {
+  try {
+    const scripts = document.querySelectorAll("script[type='application/ld+json']");
+    for (const s of scripts) {
+      const raw = s.innerText.trim();
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const items = Array.isArray(parsed) ? parsed : (parsed["@graph"] ? parsed["@graph"] : [parsed]);
+      for (const item of items) {
+        if (item && item["@type"] === "JobPosting") {
+          const tempDiv = document.createElement("div");
+          tempDiv.innerHTML = item.description || "";
+          const hiringOrg = item.hiringOrganization;
+          const companyName = typeof hiringOrg === "string" ? hiringOrg : (hiringOrg && hiringOrg.name ? hiringOrg.name : "");
+          return {
+            title: item.title || "",
+            company: companyName,
+            jd_text: cleanText(tempDiv.innerText),
+          };
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore JSON parse errors in malformed script tags
+  }
+  return null;
+}
+
 function extractJobDetails() {
   const host = window.location.hostname.toLowerCase();
   let extracted = { title: "", company: "", jd_text: "" };
 
-  if (host.includes("linkedin.com")) {
+  if (host.includes("ashbyhq.com")) {
+    extracted = extractFromAshby();
+  } else if (host.includes("linkedin.com")) {
     extracted = extractFromLinkedIn();
   } else if (host.includes("wellfound.com") || host.includes("angel.co")) {
     extracted = extractFromWellfound();
@@ -203,9 +284,21 @@ function extractJobDetails() {
     extracted = extractFromIndeed();
   } else if (host.includes("naukri.com")) {
     extracted = extractFromNaukri();
+  } else if (host.includes("instahyre.com")) {
+    extracted = extractFromInstahyre();
   }
 
-  // If specialized extractor failed or yielded too little text, use generic fallback
+  // Attempt JSON-LD if specialized extractor yielded too little description
+  if (!extracted.jd_text || extracted.jd_text.length < 150) {
+    const jsonLd = extractJsonLd();
+    if (jsonLd && jsonLd.jd_text && jsonLd.jd_text.length >= 150) {
+      extracted.title = extracted.title || jsonLd.title;
+      extracted.company = extracted.company || jsonLd.company;
+      extracted.jd_text = jsonLd.jd_text;
+    }
+  }
+
+  // If still too little text, use generic DOM / selection fallback
   if (!extracted.jd_text || extracted.jd_text.length < 150) {
     const generic = extractGeneric();
     extracted.title = extracted.title || generic.title;

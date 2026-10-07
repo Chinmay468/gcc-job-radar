@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GCC Job Radar — JD Evaluator & Resume Tailor",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "description": "Instantly evaluate job descriptions against your engineering stack and generate 1-click tailored PDF resumes locally via Tectonic (no Overleaf needed).",
   "icons": {
     "16": "icons/icon16.png",
@@ -9,7 +9,6 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_popup": "popup.html",
     "default_title": "GCC Job Radar & Resume Tailor",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -17,7 +16,11 @@
       "128": "icons/icon128.png"
     }
   },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
   "permissions": [
+    "sidePanel",
     "activeTab",
     "scripting",
     "downloads",

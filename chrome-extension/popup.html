@@ -55,7 +55,7 @@
         <div class="brand-text">
           <div class="title-row">
             <h1 class="title">GCC Job Radar</h1>
-            <span class="badge-v">v2.0</span>
+            <span class="badge-v">v2.2</span>
           </div>
           <p class="subtitle">AI Evaluator & Resume Tailor</p>
         </div>
@@ -73,6 +73,15 @@
         <button id="btn-retry-bridge" class="btn-text">Retry</button>
       </div>
       <div class="bridge-help">Run <code>python tools/extension_bridge.py</code> in project root.</div>
+    </div>
+
+    <!-- Active Tab Switch Notification Banner (for Side Panel mode) -->
+    <div id="tab-switch-banner" class="tab-switch-banner hidden">
+      <div class="tab-info">
+        <span>🔄</span>
+        <span id="tab-switch-title">New tab detected</span>
+      </div>
+      <button id="btn-tab-switch-load" class="btn-switch-load" type="button">Load Job</button>
     </div>
 
     <!-- Job Info Input Card -->

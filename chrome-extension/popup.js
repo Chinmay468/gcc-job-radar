@@ -20,6 +20,11 @@ const jdTextareaWrap = document.getElementById("jd-textarea-wrap");
 const toggleJdText = document.getElementById("toggle-jd-text");
 const toggleJdIcon = document.getElementById("toggle-jd-icon");
 
+// Side Panel tab switch elements
+const tabSwitchBanner = document.getElementById("tab-switch-banner");
+const tabSwitchTitle = document.getElementById("tab-switch-title");
+const btnTabSwitchLoad = document.getElementById("btn-tab-switch-load");
+
 const btnEvaluate = document.getElementById("btn-evaluate");
 const btnTailor = document.getElementById("btn-tailor");
 const btnDismissMain = document.getElementById("btn-dismiss-main");
@@ -112,6 +117,26 @@ function setupEventListeners() {
       }
     });
   }
+
+  if (btnTabSwitchLoad) {
+    btnTabSwitchLoad.addEventListener("click", async () => {
+      if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
+      currentEvaluation = null;
+      inputCompany.value = "";
+      inputTitle.value = "";
+      inputJd.value = "";
+      evalCard.classList.add("hidden");
+      tailorCard.classList.add("hidden");
+      await loadJobFromActiveTab();
+    });
+  }
+
+  // Side Panel mode: listen for active tab changes
+  if (chrome.tabs && chrome.tabs.onActivated) {
+    chrome.tabs.onActivated.addListener(async (activeInfo) => {
+      await handleTabActivated(activeInfo.tabId);
+    });
+  }
 }
 
 function openUrlInTab(url) {
@@ -173,6 +198,7 @@ function setBridgeBadge(status, text) {
 
 // 2. Extract Job Details from Active Tab
 async function loadJobFromActiveTab() {
+  if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
   try {
     // Check if context menu saved a selection
     const stored = await chrome.storage.local.get(["selected_jd_text", "page_url", "page_title"]);
@@ -210,6 +236,37 @@ async function loadJobFromActiveTab() {
     });
   } catch (e) {
     console.warn("Could not query tab:", e);
+  }
+}
+
+async function handleTabActivated(tabId) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab || !tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("chrome-extension://")) {
+      if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
+      return;
+    }
+
+    // If current form has no JD text, seamlessly auto-load from the newly activated tab
+    if (!inputJd.value.trim()) {
+      await loadJobFromActiveTab();
+      return;
+    }
+
+    // If currently already viewing this tab's URL, hide prompt
+    if (currentActiveUrl && tab.url === currentActiveUrl) {
+      if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
+      return;
+    }
+
+    // Active tab has a different job/page: show banner offering to load it
+    if (tabSwitchBanner && tabSwitchTitle) {
+      const displayTitle = (tab.title || "Job Posting").split(/[-|–]/)[0].trim().slice(0, 32);
+      tabSwitchTitle.textContent = `New tab: "${displayTitle}"`;
+      tabSwitchBanner.classList.remove("hidden");
+    }
+  } catch (e) {
+    // Ignore tab query errors
   }
 }
 

@@ -6,17 +6,20 @@ A Chrome Extension (Manifest V3) designed to evaluate job descriptions on the fl
 
 ## ⚡ Key Capabilities
 
-1. **Auto-Detects Job Postings**:
-   - Native deep extractors for **LinkedIn, Wellfound (AngelList), Indeed, Naukri, Greenhouse, Lever, Workday, SmartRecruiters, and Unstop**.
-   - Universal DOM fallback: automatically extracts from `<article>`, `<main>`, or any text you manually highlight on the page.
-2. **Instant Fit Evaluation**:
+1. **Persistent Chrome Side Panel (v2.2)**:
+   - Sits docked side-by-side with any job board or ATS application without closing when you click around the page.
+   - Live tab synchronization automatically detects when you switch tabs to a new job opening.
+2. **Auto-Detects Job Postings Across 10+ Portals**:
+   - Native deep extractors for **Ashby (`ashbyhq.com`), LinkedIn, Wellfound, Indeed, Naukri, Greenhouse, Lever, Workday, SmartRecruiters, Instahyre, and Unstop**.
+   - Schema.org `application/ld+json` structured parser + universal DOM fallback (`<article>`, `<main>`, or user-selected text).
+3. **Instant Fit Evaluation**:
    - Runs fast rule checks against Chinmay's profile (Java, Spring Boot, React, Node.js, SQL, 0–2 YOE).
    - Calls Groq AI to calculate fit score (0–100), verdict (`APPLY`, `BORDERLINE`, `SKIP`), matched vs. missing skills, and green flags / hard blocks.
-3. **1-Click Local Resume Tailoring & PDF Compilation (Zero Overleaf)**:
+4. **1-Click Local Resume Tailoring & PDF Compilation (Zero Overleaf)**:
    - Prompts Groq to tailor `master_resume.tex` specifically for the target JD.
    - Compiles `.tex` $\to$ `.pdf` directly using standalone [`tools/bin/tectonic.exe`](file:///D:/Projects/gcc-job-radar/tools/bin/tectonic.exe) in **~1.4 seconds**.
-   - Triggers native browser download for `Chinmay_Maheshwari_<Company>_<Role>.pdf`.
-4. **Direct Radar DB Sync**:
+   - Responsive embedded PDF preview with iterative feedback tweaking and instant downloads.
+5. **Direct Radar DB Sync**:
    - 1-click **"Mark Applied in Radar"** saves the job into your local `gcc_jobs.db` tracker and prepares it for Turso Cloud sync.
 
 ---
@@ -48,30 +51,30 @@ You will see:
    chrome://extensions
    ```
 2. Enable **Developer mode** toggle in the top-right corner.
-3. Click the **Load unpacked** button in the top-left.
+3. Click the **Load unpacked** button in the top-left (or click **Reload** if already installed).
 4. Select the directory:
    ```text
    D:\Projects\gcc-job-radar\chrome-extension
    ```
-5. Pin the **GCC Job Radar** extension to your Chrome toolbar for easy access.
+5. Pin the **GCC Job Radar** extension to your Chrome toolbar.
 
 ---
 
 ## 📖 How to Use
 
 1. **Browse to any Job Posting**:
-   - Open any job listing on LinkedIn, Wellfound, Naukri, or any company career page.
-2. **Open the Extension**:
-   - Click the GCC Job Radar icon in your browser toolbar.
+   - Open any job listing on Ashby, LinkedIn, Wellfound, Naukri, or company career portals.
+2. **Open the Side Panel**:
+   - Click the GCC Job Radar icon in your browser toolbar. The extension opens docked in your Chrome **Side Panel** on the right.
    - The extension automatically extracts the **Company**, **Role**, and **Job Description**.
-   - *(Tip: You can also highlight any text on the page to evaluate only the selected snippet).*
+   - *(Tip: You can also highlight any text on the page, right-click, and choose "Evaluate & Tailor Resume for Selection").*
 3. **Evaluate**:
    - Click **⚡ Evaluate Fit**.
    - In 2 seconds, you get a score (e.g. `95/100`), verdict badge (`APPLY`), matched skills pill tags, and specific recommendation advice.
 4. **Tailor & Download PDF**:
-   - Click **📄 Tailor & Compile PDF**.
+   - Click **✨ Tailor Resume**.
    - The Groq engine tailors the LaTeX bullet points and skills ordering.
    - Tectonic compiles the PDF in ~1.4 seconds.
-   - The compiled PDF automatically downloads to your `Downloads` folder!
+   - Preview the PDF right in the side panel, request tweaks, or click **Looks Good, Download PDF**.
 5. **Mark Applied**:
    - Click **✅ Mark Applied in Radar** to log the application in `gcc_jobs.db`.
