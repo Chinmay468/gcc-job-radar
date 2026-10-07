@@ -281,3 +281,100 @@ def test_build_ranked_presentation_and_tiers() -> None:
     assert "💡 <i>" in html_text
     assert "➕ <b>+1 more roles at Twilio" in html_text
 
+
+def test_degree_requirement_risk_scoring_and_why_flag() -> None:
+    """Verify strict CS-only degree requirements trigger -10 soft penalty and why-line warning flag."""
+    base_title = "Backend Engineer (Java, Spring Boot)"
+    base_desc = "Building backend microservices using Java and Spring Boot."
+
+    score_base, _, why_base = evaluate_job_relevance(
+        title=base_title,
+        description=base_desc,
+    )
+    assert score_base > 0
+    assert "⚠️ Lists CS-only degree req" not in why_base
+
+    # 1. 'degree in Computer Science or related field' -> no penalty, no flag
+    score_related, _, why_related = evaluate_job_relevance(
+        title=base_title,
+        description=f"{base_desc}\nRequires a degree in Computer Science or related field.",
+    )
+    assert score_related == score_base
+    assert "⚠️ Lists CS-only degree req" not in why_related
+
+    # 2. 'degree in Computer Science or Information Technology' -> no penalty, no flag
+    score_it, _, why_it = evaluate_job_relevance(
+        title=base_title,
+        description=f"{base_desc}\nRequires a degree in Computer Science or Information Technology.",
+    )
+    assert score_it == score_base
+    assert "⚠️ Lists CS-only degree req" not in why_it
+
+    # 3. 'Pursuing a degree in Computer Science' with no escape hatch -> penalty -10, why ends with warning
+    score_strict, _, why_strict = evaluate_job_relevance(
+        title=base_title,
+        description=f"{base_desc}\nPursuing a degree in Computer Science.",
+    )
+    assert score_strict == score_base - 10
+    assert why_strict.endswith(" • ⚠️ Lists CS-only degree req (may be screened)")
+
+    # 4. No degree requirement mentioned -> unaffected, no flag
+    score_none, _, why_none = evaluate_job_relevance(
+        title=base_title,
+        description=base_desc,
+    )
+    assert score_none == score_base
+    assert "⚠️ Lists CS-only degree req" not in why_none
+
+
+def test_degree_requirement_risk_tier_boundary_transition() -> None:
+    """Confirm strict CS penalty can move a posting across tier boundary (e.g. Best Fit -> Strong Fit)."""
+    anchor_job = JobPosting(
+        id="anchor-top",
+        company="Databricks",
+        title="Senior Backend Engineer (Java, Spring Boot, Kafka)",
+        location="Bengaluru",
+        description="High fit core backend stack Java Spring Boot Kafka",
+        apply_url="https://databricks.com/jobs/1",
+        provider=ATSProvider.GREENHOUSE,
+    )
+    score_job_posting(anchor_job)
+    assert (anchor_job.relevance_score or 0) >= 40
+
+    # A job that scores exactly 45 without strict CS requirement
+    # Title "Software Engineer" (+10 bonus), React (+20), Docker (+15) = 45
+    job_unrestricted = JobPosting(
+        id="job-unrestricted",
+        company="EA Sports",
+        title="Software Engineer",
+        location="Hyderabad",
+        description="Looking for developer with React and Docker. Degree in Computer Science or related field.",
+        apply_url="https://ea.com/jobs/1",
+        provider=ATSProvider.GREENHOUSE,
+    )
+    score_job_posting(job_unrestricted)
+    assert job_unrestricted.relevance_score == 45
+
+    pres_unrestricted = build_ranked_presentation([anchor_job, job_unrestricted])
+    assert any(job_unrestricted in t.jobs for t in pres_unrestricted.tiers if t.label == "⭐ Best Fit")
+
+    # The same job with strict CS requirement drops score to 35
+    job_strict = JobPosting(
+        id="job-strict",
+        company="EA Sports",
+        title="Software Engineer",
+        location="Hyderabad",
+        description="Looking for developer with React and Docker. Pursuing a degree in Computer Science.",
+        apply_url="https://ea.com/jobs/2",
+        provider=ATSProvider.GREENHOUSE,
+    )
+    score_job_posting(job_strict)
+    assert job_strict.relevance_score == 35
+    assert job_strict.why is not None
+    assert "⚠️ Lists CS-only degree req (may be screened)" in job_strict.why
+
+    pres_strict = build_ranked_presentation([anchor_job, job_strict])
+    # Role still appears (never dropped), but now in ⚡ Strong Fit
+    assert any(job_strict in t.jobs for t in pres_strict.tiers if t.label == "⚡ Strong Fit")
+    assert not any(job_strict in t.jobs for t in pres_strict.tiers if t.label == "⭐ Best Fit")
+

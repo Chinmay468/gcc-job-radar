@@ -61,6 +61,17 @@ NON_STACK_DISQUALIFIERS: list[tuple[re.Pattern[str], int]] = [
     (re.compile(r"(?i)\b(?:ruby|rails|php|laravel|c#|\.net)\b"), 20),
 ]
 
+# Degree Requirement Risk (strict CS-only degree requirements without 'or related' escape hatch)
+DEGREE_RISK_PATTERN = re.compile(
+    r"(?i)\b(?:(?:b\.?s\.?|bachelor(?:'s)?(?:\s+degree)?|degree)\s+in\s+computer\s+science|\bcs\s+degree)\b"
+    r"(?!\s*[,/]?\s*(?:or\s+|/\s*|,\s*)?(?:related|equivalent|similar|information\s+technology|it\b|a\s+related|an\s+equivalent))",
+)
+
+
+def _has_strict_cs_requirement(description: str) -> bool:
+    """True if the posting demands a CS degree with no 'or related field' escape hatch."""
+    return bool(DEGREE_RISK_PATTERN.search(description))
+
 
 def evaluate_job_relevance(
     title: str,
@@ -124,6 +135,11 @@ def evaluate_job_relevance(
         for pattern, penalty in NON_STACK_DISQUALIFIERS:
             if pattern.search(title) or pattern.search(combined_text):
                 raw_score -= penalty
+
+    # Degree-requirement risk (soft penalty, not a hard exclude)
+    degree_risk = _has_strict_cs_requirement(combined_text)
+    if degree_risk:
+        raw_score -= 10
 
     # Normalize to 0 - 100 bounds
     final_score = max(0, min(100, raw_score))
@@ -230,6 +246,9 @@ def evaluate_job_relevance(
             why = "Verified entry-level opening • Remote-friendly"
         else:
             why = "Verified entry-level opening at target tech hub"
+
+    if degree_risk:
+        why += " • ⚠️ Lists CS-only degree req (may be screened)"
 
     return final_score, matched_stack_ordered, why
 
