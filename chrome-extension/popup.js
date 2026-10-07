@@ -1,20 +1,28 @@
 /**
- * popup.js — GCC Job Radar & Resume Tailor
+ * popup.js — GCC Job Radar & Resume Tailor (Redesigned)
  * Connects browser tab data to local Bridge daemon on http://127.0.0.1:8765
  */
 
 const BRIDGE_URL = "http://127.0.0.1:8765";
 
-// DOM Elements
+// Header DOM Elements
 const bridgeStatus = document.getElementById("bridge-status");
 const bridgeWarning = document.getElementById("bridge-warning");
 const btnRetryBridge = document.getElementById("btn-retry-bridge");
+const btnMenuOverflow = document.getElementById("btn-menu-overflow");
+const overflowMenu = document.getElementById("overflow-menu");
+const btnViewMasterPdf = document.getElementById("btn-view-master-pdf");
+const btnReextract = document.getElementById("btn-reextract");
 
+// Job Card Elements
+const summaryCompany = document.getElementById("summary-company");
+const summaryTitle = document.getElementById("summary-title");
+const btnEditJobMeta = document.getElementById("btn-edit-job-meta");
+const jobMetaInputs = document.getElementById("job-meta-inputs");
 const inputCompany = document.getElementById("input-company");
 const inputTitle = document.getElementById("input-title");
 const inputJd = document.getElementById("input-jd");
 const jdCharCount = document.getElementById("jd-char-count");
-const btnReextract = document.getElementById("btn-reextract");
 const btnToggleJd = document.getElementById("btn-toggle-jd");
 const jdTextareaWrap = document.getElementById("jd-textarea-wrap");
 const toggleJdText = document.getElementById("toggle-jd-text");
@@ -28,63 +36,30 @@ const btnDirectAts = document.getElementById("btn-direct-ats");
 const btnDirectAtsIcon = document.getElementById("btn-direct-ats-icon");
 const btnDirectAtsLabel = document.getElementById("btn-direct-ats-label");
 
-// Side Panel tab switch elements
+// Tab Switch Banner
 const tabSwitchBanner = document.getElementById("tab-switch-banner");
 const tabSwitchTitle = document.getElementById("tab-switch-title");
 const btnTabSwitchLoad = document.getElementById("btn-tab-switch-load");
 
+// Actions Section
 const btnEvaluate = document.getElementById("btn-evaluate");
 const btnTailor = document.getElementById("btn-tailor");
 const btnOutreach = document.getElementById("btn-outreach");
-const btnDismissMain = document.getElementById("btn-dismiss-main");
-
-// Outreach Studio DOM Elements (Phase 3)
-const outreachCard = document.getElementById("outreach-card");
-const btnSearchRecruiters = document.getElementById("btn-search-recruiters");
-const tabOutreachLinkedin = document.getElementById("tab-outreach-linkedin");
-const tabOutreachEmail = document.getElementById("tab-outreach-email");
-const tabOutreachReferral = document.getElementById("tab-outreach-referral");
-const audiencePills = document.querySelectorAll(".audience-pill");
-const outreachSubjectRow = document.getElementById("outreach-subject-row");
-const outreachSubjectInput = document.getElementById("outreach-subject-input");
-const btnCopySubject = document.getElementById("btn-copy-subject");
-const outreachBodyTextarea = document.getElementById("outreach-body-textarea");
-const outreachCharCount = document.getElementById("outreach-char-count");
-const btnCopyOutreach = document.getElementById("btn-copy-outreach");
-const copyOutreachIcon = document.getElementById("copy-outreach-icon");
-const copyOutreachText = document.getElementById("copy-outreach-text");
-
-let currentOutreachData = null;
-let currentOutreachFormat = "linkedin";
-let currentAudience = "recruiter";
-
-// Autofill & Screening Assistant DOM Elements (Phase 4)
 const btnAutofill = document.getElementById("btn-autofill");
+const btnDismissMain = document.getElementById("btn-dismiss-main");
 const autofillBanner = document.getElementById("autofill-banner");
-const screeningCard = document.getElementById("screening-card");
-const btnCloseScreening = document.getElementById("btn-close-screening");
-const chipBtns = document.querySelectorAll(".chip-btn");
-const screeningQuestionInput = document.getElementById("screening-question-input");
-const btnGenerateAnswer = document.getElementById("btn-generate-answer");
-const screeningAnswerBox = document.getElementById("screening-answer-box");
-const screeningAnswerTextarea = document.getElementById("screening-answer-textarea");
-const screeningSourceTag = document.getElementById("screening-source-tag");
-const btnCopyScreening = document.getElementById("btn-copy-screening");
-const copyScreeningIcon = document.getElementById("copy-screening-icon");
-const copyScreeningText = document.getElementById("copy-screening-text");
-const btnInsertScreening = document.getElementById("btn-insert-screening");
+const dismissBanner = document.getElementById("dismiss-banner");
 
-let candidateProfileCache = null;
-let lastFocusedFieldId = null;
-
+// Results Area & Empty State
+const resultsArea = document.getElementById("results-area");
+const emptyState = document.getElementById("empty-state");
 const loadingCard = document.getElementById("loading-card");
 const loadingText = document.getElementById("loading-text");
 
-// Eval card elements
+// Evaluation Card Elements
 const evalCard = document.getElementById("eval-card");
 const verdictBadge = document.getElementById("verdict-badge");
 const btnDismissEval = document.getElementById("btn-dismiss-eval");
-const dismissBanner = document.getElementById("dismiss-banner");
 const scoreVal = document.getElementById("score-val");
 const gaugeFill = document.getElementById("gauge-fill");
 const oneLineReason = document.getElementById("one-line-reason");
@@ -100,10 +75,35 @@ const hardBlocksList = document.getElementById("hard-blocks-list");
 const warningsContainer = document.getElementById("warnings-container");
 const warningsList = document.getElementById("warnings-list");
 
-// Master Resume Preview
-const btnViewMasterPdf = document.getElementById("btn-view-master-pdf");
+// Outreach Card Elements
+const outreachCard = document.getElementById("outreach-card");
+const btnSearchRecruiters = document.getElementById("btn-search-recruiters");
+const tabOutreachLinkedin = document.getElementById("tab-outreach-linkedin");
+const tabOutreachEmail = document.getElementById("tab-outreach-email");
+const tabOutreachReferral = document.getElementById("tab-outreach-referral");
+const audiencePills = document.querySelectorAll(".audience-pill");
+const outreachSubjectRow = document.getElementById("outreach-subject-row");
+const outreachSubjectInput = document.getElementById("outreach-subject-input");
+const btnCopySubject = document.getElementById("btn-copy-subject");
+const outreachBodyTextarea = document.getElementById("outreach-body-textarea");
+const outreachCharCount = document.getElementById("outreach-char-count");
+const btnCopyOutreach = document.getElementById("btn-copy-outreach");
+const copyOutreachText = document.getElementById("copy-outreach-text");
 
-// Tailor & Preview card elements
+// Screening Assistant Card Elements
+const screeningCard = document.getElementById("screening-card");
+const btnCloseScreening = document.getElementById("btn-close-screening");
+const chipBtns = document.querySelectorAll(".chip-btn");
+const screeningQuestionInput = document.getElementById("screening-question-input");
+const btnGenerateAnswer = document.getElementById("btn-generate-answer");
+const screeningAnswerBox = document.getElementById("screening-answer-box");
+const screeningAnswerTextarea = document.getElementById("screening-answer-textarea");
+const screeningSourceTag = document.getElementById("screening-source-tag");
+const btnCopyScreening = document.getElementById("btn-copy-screening");
+const copyScreeningText = document.getElementById("copy-screening-text");
+const btnInsertScreening = document.getElementById("btn-insert-screening");
+
+// Tailor Card Elements
 const tailorCard = document.getElementById("tailor-card");
 const previewStatusTitle = document.getElementById("preview-status-title");
 const tailorFilename = document.getElementById("tailor-filename");
@@ -118,44 +118,119 @@ const btnMarkApplied = document.getElementById("btn-mark-applied");
 const diffContainer = document.getElementById("diff-container");
 const diffContent = document.getElementById("diff-content");
 
+// Footer Elements
 const footerDbStats = document.getElementById("footer-db-stats");
 
+// State Variables
 let currentActiveUrl = "";
 let currentEvaluation = null;
 let currentFilename = "";
 let currentDownloadUrl = "";
 let currentViewUrl = "";
-let currentVersion = 1;
+let currentOutreachData = null;
+let currentOutreachFormat = "linkedin";
+let currentAudience = "recruiter";
+let candidateProfileCache = null;
+let lastFocusedFieldId = null;
 
 // Initialize on DOM ready
 document.addEventListener("DOMContentLoaded", async () => {
   setupEventListeners();
+  updateActionButtonsState();
+  updateEmptyStateVisibility();
   await checkBridgeHealth();
   await loadJobFromActiveTab();
 });
 
 function setupEventListeners() {
-  inputJd.addEventListener("input", updateCharCount);
-  if (btnToggleJd) btnToggleJd.addEventListener("click", () => toggleJdCompact());
-  btnRetryBridge.addEventListener("click", checkBridgeHealth);
-  btnReextract.addEventListener("click", loadJobFromActiveTab);
-  btnEvaluate.addEventListener("click", handleEvaluate);
-  btnTailor.addEventListener("click", handleTailor);
-  if (btnDismissMain) btnDismissMain.addEventListener("click", handleDismissJob);
-  if (btnDismissEval) btnDismissEval.addEventListener("click", handleDismissJob);
-  btnRefine.addEventListener("click", handleRefine);
-  btnConfirmDownload.addEventListener("click", handleDownloadResume);
-  btnViewDiff.addEventListener("click", () => {
-    diffContainer.classList.toggle("hidden");
+  // Input tracking
+  inputJd.addEventListener("input", () => {
+    updateCharCount();
+    updateActionButtonsState();
   });
-  btnMarkApplied.addEventListener("click", handleMarkApplied);
+
+  inputCompany.addEventListener("input", () => {
+    updateJobSummary();
+    const comp = inputCompany.value.trim();
+    if (comp) {
+      lookupAndRenderCompany(comp, inputTitle.value.trim(), currentActiveUrl);
+    } else if (companyIntelligenceBar) {
+      companyIntelligenceBar.classList.add("hidden");
+    }
+  });
+
+  inputTitle.addEventListener("input", () => {
+    updateJobSummary();
+  });
+
+  if (btnToggleJd) {
+    btnToggleJd.addEventListener("click", () => toggleJdCompact());
+  }
+
+  // Edit company/role toggle
+  if (btnEditJobMeta && jobMetaInputs) {
+    btnEditJobMeta.addEventListener("click", () => {
+      jobMetaInputs.classList.toggle("hidden");
+      if (!jobMetaInputs.classList.contains("hidden")) {
+        inputCompany.focus();
+      }
+    });
+  }
+
+  // Header overflow menu toggle
+  if (btnMenuOverflow && overflowMenu) {
+    btnMenuOverflow.addEventListener("click", (e) => {
+      e.stopPropagation();
+      overflowMenu.classList.toggle("hidden");
+    });
+    document.addEventListener("click", (e) => {
+      if (!btnMenuOverflow.contains(e.target)) {
+        overflowMenu.classList.add("hidden");
+      }
+    });
+  }
 
   if (btnViewMasterPdf) {
     btnViewMasterPdf.addEventListener("click", (e) => {
       e.preventDefault();
+      if (overflowMenu) overflowMenu.classList.add("hidden");
       openUrlInTab(`${BRIDGE_URL}/view/master_resume.pdf`);
     });
   }
+
+  if (btnReextract) {
+    btnReextract.addEventListener("click", () => {
+      if (overflowMenu) overflowMenu.classList.add("hidden");
+      loadJobFromActiveTab();
+    });
+  }
+
+  btnRetryBridge.addEventListener("click", checkBridgeHealth);
+
+  // Actions
+  btnEvaluate.addEventListener("click", () => handleEvaluate());
+  btnTailor.addEventListener("click", () => handleTailor());
+  if (btnOutreach) btnOutreach.addEventListener("click", () => handleGenerateOutreach());
+  if (btnAutofill) btnAutofill.addEventListener("click", () => handleAutofillForm());
+  if (btnDismissMain) btnDismissMain.addEventListener("click", () => handleDismissJob());
+  if (btnDismissEval) btnDismissEval.addEventListener("click", () => handleDismissJob());
+
+  // Direct ATS Link
+  if (btnDirectAts) {
+    btnDirectAts.addEventListener("click", (e) => {
+      e.preventDefault();
+      const href = btnDirectAts.getAttribute("data-url") || btnDirectAts.href;
+      if (href) openUrlInTab(href);
+    });
+  }
+
+  // Tailor actions
+  btnRefine.addEventListener("click", () => handleRefine());
+  btnConfirmDownload.addEventListener("click", () => handleDownloadResume());
+  btnViewDiff.addEventListener("click", () => {
+    diffContainer.classList.toggle("hidden");
+  });
+  btnMarkApplied.addEventListener("click", () => handleMarkApplied());
 
   if (btnOpenFullTab) {
     btnOpenFullTab.addEventListener("click", (e) => {
@@ -164,34 +239,12 @@ function setupEventListeners() {
       if (targetUrl) {
         openUrlInTab(targetUrl);
       } else {
-        alert("Please click 'Tailor Resume' first to compile and view your resume.");
+        showToast("Tailor your resume first to generate a full preview.", "info");
       }
     });
   }
 
-  if (inputCompany) {
-    inputCompany.addEventListener("input", () => {
-      const comp = inputCompany.value.trim();
-      if (comp) {
-        lookupAndRenderCompany(comp, inputTitle.value.trim(), currentActiveUrl);
-      } else if (companyIntelligenceBar) {
-        companyIntelligenceBar.classList.add("hidden");
-      }
-    });
-  }
-
-  if (btnDirectAts) {
-    btnDirectAts.addEventListener("click", (e) => {
-      e.preventDefault();
-      const href = btnDirectAts.getAttribute("data-url");
-      if (href) openUrlInTab(href);
-    });
-  }
-
-  if (btnOutreach) {
-    btnOutreach.addEventListener("click", () => handleGenerateOutreach());
-  }
-
+  // Outreach Studio events
   if (btnSearchRecruiters) {
     btnSearchRecruiters.addEventListener("click", (e) => {
       e.preventDefault();
@@ -205,15 +258,9 @@ function setupEventListeners() {
     outreachBodyTextarea.addEventListener("input", updateOutreachCharCount);
   }
 
-  if (tabOutreachLinkedin) {
-    tabOutreachLinkedin.addEventListener("click", () => switchOutreachFormat("linkedin"));
-  }
-  if (tabOutreachEmail) {
-    tabOutreachEmail.addEventListener("click", () => switchOutreachFormat("email"));
-  }
-  if (tabOutreachReferral) {
-    tabOutreachReferral.addEventListener("click", () => switchOutreachFormat("referral"));
-  }
+  if (tabOutreachLinkedin) tabOutreachLinkedin.addEventListener("click", () => switchOutreachFormat("linkedin"));
+  if (tabOutreachEmail) tabOutreachEmail.addEventListener("click", () => switchOutreachFormat("email"));
+  if (tabOutreachReferral) tabOutreachReferral.addEventListener("click", () => switchOutreachFormat("referral"));
 
   if (audiencePills && audiencePills.length > 0) {
     audiencePills.forEach((pill) => {
@@ -226,21 +273,14 @@ function setupEventListeners() {
     });
   }
 
-  if (btnCopyOutreach) {
-    btnCopyOutreach.addEventListener("click", () => handleCopyOutreach());
-  }
-  if (btnCopySubject) {
-    btnCopySubject.addEventListener("click", () => handleCopySubject());
-  }
+  if (btnCopyOutreach) btnCopyOutreach.addEventListener("click", () => handleCopyOutreach());
+  if (btnCopySubject) btnCopySubject.addEventListener("click", () => handleCopySubject());
 
-  // Phase 4 Listeners
-  if (btnAutofill) {
-    btnAutofill.addEventListener("click", () => handleAutofillForm());
-  }
-
+  // Screening assistant events
   if (btnCloseScreening) {
     btnCloseScreening.addEventListener("click", () => {
       screeningCard.classList.add("hidden");
+      updateEmptyStateVisibility();
     });
   }
 
@@ -258,7 +298,7 @@ function setupEventListeners() {
     btnGenerateAnswer.addEventListener("click", () => {
       const q = screeningQuestionInput ? screeningQuestionInput.value.trim() : "";
       if (!q) {
-        alert("Please enter or select a screening question.");
+        showToast("Please enter or pick a screening question.", "info");
         return;
       }
       handleAnswerScreeningQuestion(q);
@@ -274,14 +314,10 @@ function setupEventListeners() {
     });
   }
 
-  if (btnCopyScreening) {
-    btnCopyScreening.addEventListener("click", () => handleCopyScreeningAnswer());
-  }
+  if (btnCopyScreening) btnCopyScreening.addEventListener("click", () => handleCopyScreeningAnswer());
+  if (btnInsertScreening) btnInsertScreening.addEventListener("click", () => handleInsertScreeningAnswer());
 
-  if (btnInsertScreening) {
-    btnInsertScreening.addEventListener("click", () => handleInsertScreeningAnswer());
-  }
-
+  // Tab switch load
   if (btnTabSwitchLoad) {
     btnTabSwitchLoad.addEventListener("click", async () => {
       if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
@@ -297,10 +333,11 @@ function setupEventListeners() {
       if (autofillBanner) autofillBanner.classList.add("hidden");
       tailorCard.classList.add("hidden");
       await loadJobFromActiveTab();
+      updateEmptyStateVisibility();
     });
   }
 
-  // Side Panel mode: listen for active tab changes
+  // Side Panel tab activation
   if (chrome.tabs && chrome.tabs.onActivated) {
     chrome.tabs.onActivated.addListener(async (activeInfo) => {
       await handleTabActivated(activeInfo.tabId);
@@ -318,23 +355,78 @@ function openUrlInTab(url) {
 
 function updateCharCount() {
   const len = inputJd.value.trim().length;
-  jdCharCount.textContent = `${len.toLocaleString()} chars`;
+  if (jdCharCount) jdCharCount.textContent = `${len.toLocaleString()} chars`;
+  updateJobSummary();
+}
+
+function updateJobSummary() {
+  const comp = (inputCompany.value || "").trim();
+  const role = (inputTitle.value || "").trim();
+  const len = inputJd.value.trim().length;
+
+  if (summaryCompany) {
+    summaryCompany.textContent = comp || "No company detected";
+  }
+  if (summaryTitle) {
+    summaryTitle.textContent = role || "No role detected";
+  }
+
+  if (toggleJdText) {
+    if (len > 0) {
+      toggleJdText.textContent = `Job description captured · ${len.toLocaleString()} chars`;
+    } else {
+      toggleJdText.textContent = "Job description";
+    }
+  }
+
+  if (btnSearchRecruiters && comp) {
+    btnSearchRecruiters.href = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(comp + " recruiter")}`;
+  }
+}
+
+function updateActionButtonsState() {
+  const hasJd = inputJd.value.trim().length > 0;
+  if (btnEvaluate) {
+    btnEvaluate.disabled = !hasJd;
+    btnEvaluate.setAttribute("aria-disabled", String(!hasJd));
+  }
+  if (btnTailor) {
+    btnTailor.disabled = !hasJd;
+    btnTailor.setAttribute("aria-disabled", String(!hasJd));
+  }
+  if (btnOutreach) {
+    btnOutreach.disabled = !hasJd;
+    btnOutreach.setAttribute("aria-disabled", String(!hasJd));
+  }
+}
+
+function updateEmptyStateVisibility() {
+  if (!emptyState) return;
+  const isEvaluating = loadingCard && !loadingCard.classList.contains("hidden");
+  const hasEval = evalCard && !evalCard.classList.contains("hidden");
+  const hasOutreach = outreachCard && !outreachCard.classList.contains("hidden");
+  const hasScreening = screeningCard && !screeningCard.classList.contains("hidden");
+  const hasTailor = tailorCard && !tailorCard.classList.contains("hidden");
+
+  if (isEvaluating || hasEval || hasOutreach || hasScreening || hasTailor) {
+    emptyState.classList.add("hidden");
+  } else {
+    emptyState.classList.remove("hidden");
+  }
 }
 
 function toggleJdCompact(forceCompact) {
   if (!jdTextareaWrap) return;
   const isCompact = typeof forceCompact === "boolean"
     ? forceCompact
-    : !jdTextareaWrap.classList.contains("compact-mode");
+    : !jdTextareaWrap.classList.contains("hidden");
 
   if (isCompact) {
-    jdTextareaWrap.classList.add("compact-mode");
-    if (toggleJdText) toggleJdText.textContent = "Expand";
-    if (toggleJdIcon) toggleJdIcon.textContent = "↕️";
+    jdTextareaWrap.classList.add("hidden");
+    if (toggleJdIcon) toggleJdIcon.classList.add("chevron-rotated");
   } else {
-    jdTextareaWrap.classList.remove("compact-mode");
-    if (toggleJdText) toggleJdText.textContent = "Collapse";
-    if (toggleJdIcon) toggleJdIcon.textContent = "↕️";
+    jdTextareaWrap.classList.remove("hidden");
+    if (toggleJdIcon) toggleJdIcon.classList.remove("chevron-rotated");
   }
 }
 
@@ -348,13 +440,13 @@ async function checkBridgeHealth() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    setBridgeBadge("online", "Bridge Online");
+    setBridgeBadge("online", "Online");
     if (footerDbStats && data.database) {
       footerDbStats.textContent = `Radar DB: ${data.database.active_jobs} active (${data.database.applied_jobs} applied)`;
     }
     return true;
   } catch (err) {
-    setBridgeBadge("offline", "Bridge Offline");
+    setBridgeBadge("offline", "Offline");
     bridgeWarning.classList.remove("hidden");
     return false;
   }
@@ -369,7 +461,6 @@ function setBridgeBadge(status, text) {
 async function loadJobFromActiveTab() {
   if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
   try {
-    // Check if context menu saved a selection
     const stored = await chrome.storage.local.get(["selected_jd_text", "page_url", "page_title"]);
     if (stored.selected_jd_text) {
       inputJd.value = stored.selected_jd_text;
@@ -378,6 +469,8 @@ async function loadJobFromActiveTab() {
         guessCompanyAndRole(stored.page_title);
       }
       updateCharCount();
+      updateJobSummary();
+      updateActionButtonsState();
       if (inputCompany.value) {
         lookupAndRenderCompany(inputCompany.value.trim(), inputTitle.value.trim(), currentActiveUrl);
       }
@@ -390,11 +483,11 @@ async function loadJobFromActiveTab() {
 
     currentActiveUrl = tab.url || "";
 
-    // Send extract message to content script
     chrome.tabs.sendMessage(tab.id, { action: "extract_job_data" }, (response) => {
       if (chrome.runtime.lastError || !response || !response.success) {
-        // Fallback: use tab title
         if (tab.title) guessCompanyAndRole(tab.title);
+        updateJobSummary();
+        updateActionButtonsState();
         return;
       }
 
@@ -405,8 +498,16 @@ async function loadJobFromActiveTab() {
         inputJd.value = data.jd_text;
         updateCharCount();
       }
+      updateJobSummary();
+      updateActionButtonsState();
+
       if (inputCompany.value) {
         lookupAndRenderCompany(inputCompany.value.trim(), inputTitle.value.trim(), currentActiveUrl);
+      }
+
+      // If page auto-extracted a long JD, collapse textarea by default to keep screen compact
+      if (inputJd.value.trim().length > 300) {
+        toggleJdCompact(true);
       }
     });
   } catch (e) {
@@ -414,12 +515,13 @@ async function loadJobFromActiveTab() {
   }
 }
 
-// 2b. Lookup Company Radar Intelligence & Direct ATS Portal (Phase 2)
+// 2b. Lookup Company Radar Intelligence & Direct ATS Portal
 async function lookupAndRenderCompany(company, title, url) {
   if (!company || !companyIntelligenceBar) return;
   if (btnSearchRecruiters) {
     btnSearchRecruiters.href = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company + " recruiter")}`;
   }
+
   try {
     const queryUrl = `${BRIDGE_URL}/lookup_company?company=${encodeURIComponent(company)}&title=${encodeURIComponent(title || "")}&url=${encodeURIComponent(url || currentActiveUrl || "")}`;
     const res = await fetch(queryUrl, { method: "GET" });
@@ -431,26 +533,16 @@ async function lookupAndRenderCompany(company, title, url) {
       return;
     }
 
-    // Set badge style and label
     const badgeType = data.badge_type || (data.monitored ? "monitored" : "unmonitored");
     ciStatusBadge.className = `ci-badge ci-badge-${badgeType}`;
-    ciStatusBadge.textContent = data.badge_label;
+    ciStatusBadge.textContent = data.badge_label || (data.monitored ? "Monitored GCC" : "Unmonitored");
     ciHistoryText.textContent = data.history_text || "";
 
-    // Set Direct ATS button
     if (data.direct_ats_url) {
       btnDirectAts.setAttribute("data-url", data.direct_ats_url);
       btnDirectAts.href = data.direct_ats_url;
       if (btnDirectAtsLabel) {
         btnDirectAtsLabel.textContent = data.direct_ats_label || "Official ATS";
-      }
-
-      if (data.is_3rd_party_aggregator && data.monitored) {
-        btnDirectAts.classList.add("pulse-aggregator");
-        btnDirectAts.title = "Direct official ATS board detected! Click to bypass third-party aggregator.";
-      } else {
-        btnDirectAts.classList.remove("pulse-aggregator");
-        btnDirectAts.title = "Jump directly to official company career portal";
       }
       btnDirectAts.classList.remove("hidden");
     } else {
@@ -471,54 +563,50 @@ async function handleTabActivated(tabId) {
       return;
     }
 
-    // If current form has no JD text, seamlessly auto-load from the newly activated tab
     if (!inputJd.value.trim()) {
       await loadJobFromActiveTab();
       return;
     }
 
-    // If currently already viewing this tab's URL, hide prompt
     if (currentActiveUrl && tab.url === currentActiveUrl) {
       if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
       return;
     }
 
-    // Active tab has a different job/page: show banner offering to load it
     if (tabSwitchBanner && tabSwitchTitle) {
-      const displayTitle = (tab.title || "Job Posting").split(/[-|–]/)[0].trim().slice(0, 32);
-      tabSwitchTitle.textContent = `New tab: "${displayTitle}"`;
+      tabSwitchTitle.textContent = tab.title ? `Switch: ${tab.title.slice(0, 32)}...` : "New tab open";
       tabSwitchBanner.classList.remove("hidden");
     }
   } catch (e) {
-    // Ignore tab query errors
+    console.debug("Tab switch listener:", e);
   }
 }
 
 function guessCompanyAndRole(title) {
-  if (title.includes(" at ")) {
-    const parts = title.split(" at ");
-    if (!inputTitle.value) inputTitle.value = parts[0].trim();
-    if (!inputCompany.value) inputCompany.value = parts[1].split(/[|\-–]/)[0].trim();
-  } else if (title.includes(" - ")) {
-    const parts = title.split(" - ");
-    if (!inputTitle.value) inputTitle.value = parts[0].trim();
-    if (!inputCompany.value) inputCompany.value = parts[1].trim();
+  const clean = title.replace(/\s*[-–|•]\s*(LinkedIn|Indeed|Naukri|Wellfound|Instahyre|Ashby|Lever|Greenhouse|Workday).*/i, "").trim();
+  const parts = clean.split(/\s*[-–|:]\s*/);
+
+  if (parts.length >= 2) {
+    if (!inputCompany.value) inputCompany.value = parts[0].trim();
+    if (!inputTitle.value) inputTitle.value = parts.slice(1).join(" - ").trim();
+  } else if (!inputTitle.value) {
+    inputTitle.value = clean;
   }
-  if (inputCompany.value) {
-    lookupAndRenderCompany(inputCompany.value.trim(), inputTitle.value.trim(), currentActiveUrl);
-  }
+  updateJobSummary();
 }
 
 // 3. Handle Evaluate Fit
 async function handleEvaluate() {
   const jd_text = inputJd.value.trim();
   if (!jd_text) {
-    alert("Please provide job description text.");
+    showToast("Please provide job description text.", "info");
     return;
   }
 
-  showLoading("Evaluating JD with Groq AI & Profile Rules...");
+  showLoading("Evaluating fit against candidate profile...");
   evalCard.classList.add("hidden");
+  if (outreachCard) outreachCard.classList.add("hidden");
+  if (screeningCard) screeningCard.classList.add("hidden");
 
   try {
     const res = await fetch(`${BRIDGE_URL}/evaluate`, {
@@ -540,53 +628,53 @@ async function handleEvaluate() {
     const data = await res.json();
     currentEvaluation = data;
 
-    // Fill extracted company/title if empty
     if (!inputCompany.value && data.company) inputCompany.value = data.company;
     if (!inputTitle.value && data.title) inputTitle.value = data.title;
+    updateJobSummary();
 
     renderEvaluation(data);
   } catch (err) {
-    alert(`Evaluation failed: ${err.message}\nMake sure bridge is running.`);
+    showToast(`Evaluation failed: ${err.message}`, "bad");
   } finally {
     hideLoading();
+    updateEmptyStateVisibility();
   }
 }
 
 function renderEvaluation(data) {
-  // Score & Verdict
-  scoreVal.textContent = data.score;
-  const verdict = (data.verdict || "BORDERLINE").toUpperCase();
-  verdictBadge.textContent = verdict;
-  verdictBadge.className = `verdict-badge verdict-${verdict.toLowerCase()}`;
+  const scoreNum = Math.max(0, Math.min(100, Number(data.score) || 0));
+  scoreVal.textContent = scoreNum;
 
-  // Radial Circular Gauge Animation
+  let verdictText = (data.verdict || "BORDERLINE").toUpperCase();
+  let verdictClass = "verdict-borderline";
+  let strokeColor = "var(--warn)";
+
+  if (scoreNum >= 75) {
+    verdictText = "Strong Fit";
+    verdictClass = "verdict-apply";
+    strokeColor = "var(--good)";
+  } else if (scoreNum >= 50) {
+    verdictText = "Partial Fit";
+    verdictClass = "verdict-borderline";
+    strokeColor = "var(--warn)";
+  } else {
+    verdictText = "Weak Fit";
+    verdictClass = "verdict-dismissed";
+    strokeColor = "var(--bad)";
+  }
+
+  verdictBadge.textContent = verdictText;
+  verdictBadge.className = `verdict-badge ${verdictClass}`;
+
+  // Radial score ring
   if (gaugeFill) {
     const circumference = 201; // 2 * pi * 32
-    const scoreNum = Math.max(0, Math.min(100, Number(data.score) || 0));
     const offset = circumference - (scoreNum / 100) * circumference;
     gaugeFill.style.strokeDashoffset = offset;
-
-    if (verdict === "APPLY") {
-      gaugeFill.style.stroke = "#10b981";
-      gaugeFill.style.filter = "drop-shadow(0 0 6px rgba(16, 185, 129, 0.45))";
-    } else if (verdict === "BORDERLINE") {
-      gaugeFill.style.stroke = "#f59e0b";
-      gaugeFill.style.filter = "drop-shadow(0 0 6px rgba(245, 158, 11, 0.45))";
-    } else if (verdict === "DISMISSED") {
-      gaugeFill.style.stroke = "#64748b";
-      gaugeFill.style.filter = "none";
-    } else {
-      gaugeFill.style.stroke = "#f43f5e";
-      gaugeFill.style.filter = "drop-shadow(0 0 6px rgba(244, 63, 94, 0.45))";
-    }
+    gaugeFill.style.stroke = strokeColor;
   }
 
-  // Auto-compact long JD so score & evaluation are immediately visible
-  if (inputJd.value.trim().length > 400) {
-    toggleJdCompact(true);
-  }
-
-  oneLineReason.textContent = data.one_line_reason || "Evaluated against candidate profile.";
+  oneLineReason.textContent = data.one_line_reason || "Evaluated against profile.";
   applyAction.textContent = data.apply_action || "";
 
   // Matched Skills
@@ -595,7 +683,7 @@ function renderEvaluation(data) {
     data.matched_skills.forEach((s) => {
       const pill = document.createElement("span");
       pill.className = "pill pill-match";
-      pill.innerHTML = `<span class="skills-icon">✔</span> ${s}`;
+      pill.textContent = s;
       matchedSkills.appendChild(pill);
     });
     matchedSkillsContainer.classList.remove("hidden");
@@ -609,7 +697,7 @@ function renderEvaluation(data) {
     data.missing_skills.forEach((s) => {
       const pill = document.createElement("span");
       pill.className = "pill pill-missing";
-      pill.innerHTML = `<span class="skills-icon warning">⚠</span> ${s}`;
+      pill.textContent = s;
       missingSkills.appendChild(pill);
     });
     missingSkillsContainer.classList.remove("hidden");
@@ -657,20 +745,21 @@ function renderEvaluation(data) {
   }
 
   evalCard.classList.remove("hidden");
+  updateEmptyStateVisibility();
 }
 
-// 4. Handle Tailor & Compile PDF (Live Preview)
+// 4. Handle Tailor & Compile PDF
 async function handleTailor() {
   const jd_text = inputJd.value.trim();
   const company = inputCompany.value.trim() || "Target_Company";
   const role = inputTitle.value.trim() || "Software_Engineer";
 
   if (!jd_text) {
-    alert("Please provide job description text.");
+    showToast("Please provide job description text.", "info");
     return;
   }
 
-  showLoading("Tailoring LaTeX with Groq & Compiling PDF via Tectonic (~1.4s)...");
+  showLoading("Tailoring resume bullets & compiling PDF (Tectonic)...");
   tailorCard.classList.add("hidden");
   hideRefineStatus();
 
@@ -682,7 +771,7 @@ async function handleTailor() {
         jd_text: jd_text,
         company: company,
         role: role,
-        compile: true,
+        profile_type: "java_backend",
       }),
     });
 
@@ -694,48 +783,36 @@ async function handleTailor() {
     const data = await res.json();
     currentFilename = data.filename;
     currentDownloadUrl = data.download_url;
-    currentViewUrl = data.view_url;
-    currentVersion = 1;
+    currentViewUrl = data.view_url || `${BRIDGE_URL}/view/${encodeURIComponent(data.filename)}`;
 
-    // Setup preview card
-    previewStatusTitle.textContent = "Resume Preview (Tailored v1)";
     tailorFilename.textContent = data.filename;
-    btnOpenFullTab.href = data.view_url;
-    pdfPreviewFrame.src = `${data.view_url}?t=${Date.now()}`;
+    pdfPreviewFrame.src = `${currentViewUrl}?t=${Date.now()}`;
+    btnOpenFullTab.href = currentViewUrl;
 
-    // Diff view
-    diffContent.textContent = data.diff || "No structural diff.";
+    if (data.diff) {
+      diffContent.textContent = data.diff;
+      btnViewDiff.classList.remove("hidden");
+    }
+
     tailorCard.classList.remove("hidden");
-
-    // Scroll into preview card
-    tailorCard.scrollIntoView({ behavior: "smooth" });
+    tailorCard.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
-    alert(`Resume tailoring failed: ${err.message}\nMake sure Groq API key and Tectonic are available.`);
+    showToast(`Tailoring failed: ${err.message}`, "bad");
   } finally {
     hideLoading();
+    updateEmptyStateVisibility();
   }
 }
 
-// 5. Handle Iterative Refinement
+// 5. Handle Refine Feedback
 async function handleRefine() {
   const feedback = inputFeedback.value.trim();
   if (!feedback) {
-    showRefineStatus("Please describe what changes you want to make (e.g. emphasize a project or skill).", true);
+    showToast("Please enter suggestion notes to refine your resume.", "info");
     return;
   }
 
-  if (!currentFilename) {
-    showRefineStatus("Please click 'Tailor & Compile PDF' first to generate an initial resume.", true);
-    return;
-  }
-
-  const jd_text = inputJd.value.trim();
-  const company = inputCompany.value.trim() || "Target_Company";
-  const role = inputTitle.value.trim() || "Software_Engineer";
-
-  btnRefine.disabled = true;
-  btnRefine.innerHTML = `<span class="spinner" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin:0 4px 0 0;"></span> Applying Changes (~2s)...`;
-  hideRefineStatus();
+  showRefineStatus("Refining with Groq & compiling preview...");
 
   try {
     const res = await fetch(`${BRIDGE_URL}/refine`, {
@@ -744,9 +821,9 @@ async function handleRefine() {
       body: JSON.stringify({
         filename: currentFilename,
         feedback: feedback,
-        jd_text: jd_text,
-        company: company,
-        role: role,
+        jd_text: inputJd.value.trim(),
+        company: inputCompany.value.trim() || "Company",
+        role: inputTitle.value.trim() || "Software_Engineer",
       }),
     });
 
@@ -756,73 +833,60 @@ async function handleRefine() {
     }
 
     const data = await res.json();
-    currentVersion += 1;
     currentFilename = data.filename;
     currentDownloadUrl = data.download_url;
-    currentViewUrl = data.view_url;
+    currentViewUrl = data.view_url || `${BRIDGE_URL}/view/${encodeURIComponent(data.filename)}`;
 
-    // Refresh preview frame
-    previewStatusTitle.textContent = `Resume Preview (Refined v${currentVersion})`;
-    tailorFilename.textContent = data.filename;
-    btnOpenFullTab.href = data.view_url;
-    pdfPreviewFrame.src = `${data.view_url}?t=${Date.now()}`;
+    pdfPreviewFrame.src = `${currentViewUrl}?t=${Date.now()}`;
+    btnOpenFullTab.href = currentViewUrl;
 
-    // Update diff
     if (data.diff) {
       diffContent.textContent = data.diff;
+      diffContainer.classList.remove("hidden");
     }
 
+    showRefineStatus("Changes applied & recompiled!");
     inputFeedback.value = "";
-    showRefineStatus(`✨ Changes applied and PDF recompiled! Check preview below. You can refine again or download.`);
+    showToast("Resume refined successfully!", "good");
   } catch (err) {
-    showRefineStatus(`Refinement failed: ${err.message}`, true);
-  } finally {
-    btnRefine.disabled = false;
-    btnRefine.innerHTML = `<span class="btn-icon">🔄</span> Refine & Refresh Preview`;
+    showRefineStatus(`Refinement error: ${err.message}`);
+    showToast(`Refinement failed: ${err.message}`, "bad");
   }
 }
 
-// 6. Handle User-Confirmed Download
-function handleDownloadResume() {
-  if (!currentDownloadUrl) {
-    alert("No compiled resume available to download.");
-    return;
-  }
-
-  if (chrome.downloads && chrome.downloads.download) {
-    chrome.downloads.download({
-      url: currentDownloadUrl,
-      filename: currentFilename,
-      saveAs: false,
-    }, (downloadId) => {
-      if (chrome.runtime.lastError) {
-        window.open(currentDownloadUrl, "_blank");
-      }
-    });
-  } else {
-    const a = document.createElement("a");
-    a.href = currentDownloadUrl;
-    a.download = currentFilename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
-
-  const prevText = btnConfirmDownload.innerHTML;
-  btnConfirmDownload.innerHTML = `<span>✅ Download Started!</span>`;
-  setTimeout(() => {
-    btnConfirmDownload.innerHTML = prevText;
-  }, 2500);
-}
-
-function showRefineStatus(msg, isError = false) {
+function showRefineStatus(msg) {
   refineStatus.textContent = msg;
-  refineStatus.className = `refine-status ${isError ? "error" : ""}`;
   refineStatus.classList.remove("hidden");
 }
 
 function hideRefineStatus() {
   refineStatus.classList.add("hidden");
+}
+
+// 6. Handle Download
+function handleDownloadResume() {
+  if (!currentDownloadUrl) {
+    showToast("Please tailor your resume before downloading.", "info");
+    return;
+  }
+
+  const filename = currentFilename || "Chinmay_Maheshwari_Resume.pdf";
+  if (chrome.downloads && chrome.downloads.download) {
+    chrome.downloads.download({
+      url: currentDownloadUrl,
+      filename: filename,
+      saveAs: true,
+    });
+  } else {
+    const a = document.createElement("a");
+    a.href = currentDownloadUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  showToast("Download started!", "good");
 }
 
 // 7. Handle Mark Applied in Radar DB
@@ -831,7 +895,7 @@ async function handleMarkApplied() {
   const title = inputTitle.value.trim();
 
   if (!company || !title) {
-    alert("Company and Role title required to log in Radar database.");
+    showToast("Company and Role title required to log in Radar DB.", "info");
     return;
   }
 
@@ -850,44 +914,24 @@ async function handleMarkApplied() {
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
 
-    btnMarkApplied.textContent = "✅ Applied Logged!";
+    btnMarkApplied.textContent = "Applied Logged";
     btnMarkApplied.disabled = true;
+    showToast(`Marked ${company} as applied!`, "good");
     await lookupAndRenderCompany(company, title, currentActiveUrl);
-    setTimeout(() => {
-      btnMarkApplied.textContent = "✅ Applied in Radar DB";
-    }, 2000);
   } catch (err) {
-    alert(`Failed to record application: ${err.message}`);
+    showToast(`Failed to record application: ${err.message}`, "bad");
   }
 }
 
-// 8. Handle Dismiss Job & Company from Radar
+// 8. Handle Dismiss Job
 async function handleDismissJob() {
   const company = inputCompany.value.trim();
   const title = inputTitle.value.trim() || "All Roles";
 
   if (!company) {
-    alert("Please enter or extract the company name before dismissing.");
+    showToast("Please enter or extract company name before dismissing.", "info");
     return;
-  }
-
-  const confirmMsg = `Are you sure you want to dismiss "${company}"?\nThis will suppress alerts for this company across Telegram, scans, and daily digests.`;
-  if (!confirm(confirmMsg)) {
-    return;
-  }
-
-  const originalMainText = btnDismissMain ? btnDismissMain.innerHTML : "";
-  const originalEvalText = btnDismissEval ? btnDismissEval.innerHTML : "";
-
-  if (btnDismissMain) {
-    btnDismissMain.disabled = true;
-    btnDismissMain.innerHTML = `<span>⏳ Dismissing...</span>`;
-  }
-  if (btnDismissEval) {
-    btnDismissEval.disabled = true;
-    btnDismissEval.innerHTML = `⏳ Dismissing...`;
   }
 
   try {
@@ -912,76 +956,40 @@ async function handleDismissJob() {
       throw new Error(err.error || `HTTP ${res.status}`);
     }
 
-    const data = await res.json();
-
-    // Visual feedback
     if (verdictBadge) {
-      verdictBadge.textContent = "DISMISSED";
+      verdictBadge.textContent = "Dismissed";
       verdictBadge.className = "verdict-badge verdict-dismissed";
     }
 
-    if (gaugeFill) {
-      gaugeFill.style.stroke = "#64748b";
-      gaugeFill.style.filter = "none";
-    }
-
     if (dismissBanner) {
-      dismissBanner.innerHTML = `<span>🗑️</span><span><strong>${company}</strong> dismissed and suppressed from future radar scans & alerts.</span>`;
+      dismissBanner.textContent = `${company} dismissed from future Radar scans and alerts.`;
       dismissBanner.classList.remove("hidden");
     }
 
-    if (btnDismissMain) {
-      btnDismissMain.innerHTML = `<span class="btn-icon">✅</span> Dismissed`;
-      btnDismissMain.classList.add("btn-disabled");
-    }
-    if (btnDismissEval) {
-      btnDismissEval.innerHTML = `✅ Dismissed`;
-      btnDismissEval.disabled = true;
-    }
+    showToast(`Dismissed ${company} from Radar`, "bad", () => {
+      dismissBanner.classList.add("hidden");
+      showToast(`Restored ${company} in Radar`, "good");
+    });
 
-    // Refresh company status & bridge stats
     await lookupAndRenderCompany(company, title, currentActiveUrl);
     await checkBridgeHealth();
-
   } catch (err) {
-    alert(`Failed to dismiss job: ${err.message}\nMake sure the local bridge is running.`);
-    if (btnDismissMain) {
-      btnDismissMain.disabled = false;
-      btnDismissMain.innerHTML = originalMainText;
-    }
-    if (btnDismissEval) {
-      btnDismissEval.disabled = false;
-      btnDismissEval.innerHTML = originalEvalText;
-    }
+    showToast(`Failed to dismiss job: ${err.message}`, "bad");
   }
 }
 
-function showLoading(msg) {
-  loadingText.textContent = msg;
-  loadingCard.classList.remove("hidden");
-}
-
-function hideLoading() {
-  loadingCard.classList.add("hidden");
-}
-
-// 9. Recruiter Outreach & InMail Studio (Phase 3)
+// 9. Recruiter Outreach Studio
 async function handleGenerateOutreach() {
   const jd_text = inputJd.value.trim();
   const company = inputCompany.value.trim() || "Target Company";
   const role = inputTitle.value.trim() || "Software Engineer";
 
   if (!jd_text && !company) {
-    alert("Please provide either a Job Description or Company Name to generate tailored outreach.");
+    showToast("Provide JD or Company name to generate outreach.", "info");
     return;
   }
 
-  // Update recruiter search link on LinkedIn
-  if (btnSearchRecruiters) {
-    btnSearchRecruiters.href = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company + " recruiter")}`;
-  }
-
-  showLoading(`Generating personalized ${currentAudience.replace("_", " ")} outreach...`);
+  showLoading(`Generating ${currentAudience.replace("_", " ")} outreach...`);
 
   try {
     const matched_skills = (currentEvaluation && currentEvaluation.matched_skills) ? currentEvaluation.matched_skills : [];
@@ -1010,12 +1018,13 @@ async function handleGenerateOutreach() {
 
     if (outreachCard) {
       outreachCard.classList.remove("hidden");
-      outreachCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      outreachCard.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   } catch (err) {
-    alert(`Failed to generate outreach: ${err.message}\nMake sure the local bridge is running.`);
+    showToast(`Outreach generation failed: ${err.message}`, "bad");
   } finally {
     hideLoading();
+    updateEmptyStateVisibility();
   }
 }
 
@@ -1031,10 +1040,8 @@ function switchOutreachFormat(format) {
 
 function renderOutreachView() {
   if (!currentOutreachData) return;
-
   const data = currentOutreachData;
 
-  // Toggle Subject row (only relevant for email / inmail)
   if (currentOutreachFormat === "email") {
     if (outreachSubjectRow) outreachSubjectRow.classList.remove("hidden");
     if (outreachSubjectInput) {
@@ -1044,7 +1051,6 @@ function renderOutreachView() {
     if (outreachSubjectRow) outreachSubjectRow.classList.add("hidden");
   }
 
-  // Populate message body
   let text = "";
   if (currentOutreachFormat === "linkedin") {
     text = data.linkedin_connection_note || "";
@@ -1059,9 +1065,6 @@ function renderOutreachView() {
   }
 
   updateOutreachCharCount();
-
-  // Reset copy button state
-  if (copyOutreachIcon) copyOutreachIcon.textContent = "📋";
   if (copyOutreachText) {
     copyOutreachText.textContent = currentOutreachFormat === "linkedin" ? "Copy Note" : "Copy Message";
   }
@@ -1074,48 +1077,36 @@ function updateOutreachCharCount() {
   if (currentOutreachFormat === "linkedin") {
     outreachCharCount.textContent = `${len} / 300 chars`;
     if (len > 300) {
-      outreachCharCount.className = "outreach-char-count char-exceed";
+      outreachCharCount.style.color = "var(--bad)";
     } else if (len >= 270) {
-      outreachCharCount.className = "outreach-char-count char-warn";
+      outreachCharCount.style.color = "var(--warn)";
     } else {
-      outreachCharCount.className = "outreach-char-count char-ok";
+      outreachCharCount.style.color = "var(--good)";
     }
   } else {
     outreachCharCount.textContent = `${len} chars`;
-    outreachCharCount.className = "outreach-char-count char-ok";
+    outreachCharCount.style.color = "var(--text-muted)";
   }
 }
 
 async function handleCopyOutreach() {
   if (!outreachBodyTextarea) return;
   const text = outreachBodyTextarea.value;
-  if (!text) {
-    alert("No message to copy.");
-    return;
-  }
+  if (!text) return;
 
   try {
     await navigator.clipboard.writeText(text);
-    if (copyOutreachIcon) copyOutreachIcon.textContent = "✅";
     if (copyOutreachText) copyOutreachText.textContent = "Copied!";
+    showToast("Outreach message copied to clipboard!", "good");
     setTimeout(() => {
-      if (copyOutreachIcon) copyOutreachIcon.textContent = "📋";
       if (copyOutreachText) {
         copyOutreachText.textContent = currentOutreachFormat === "linkedin" ? "Copy Note" : "Copy Message";
       }
     }, 2000);
   } catch (err) {
-    // Fallback copy
     outreachBodyTextarea.select();
     document.execCommand("copy");
-    if (copyOutreachIcon) copyOutreachIcon.textContent = "✅";
-    if (copyOutreachText) copyOutreachText.textContent = "Copied!";
-    setTimeout(() => {
-      if (copyOutreachIcon) copyOutreachIcon.textContent = "📋";
-      if (copyOutreachText) {
-        copyOutreachText.textContent = currentOutreachFormat === "linkedin" ? "Copy Note" : "Copy Message";
-      }
-    }, 2000);
+    showToast("Copied to clipboard!", "good");
   }
 }
 
@@ -1126,22 +1117,18 @@ async function handleCopySubject() {
 
   try {
     await navigator.clipboard.writeText(text);
-    const originalText = btnCopySubject ? btnCopySubject.textContent : "Copy";
     if (btnCopySubject) btnCopySubject.textContent = "Copied!";
+    showToast("Subject copied!", "good");
     setTimeout(() => {
-      if (btnCopySubject) btnCopySubject.textContent = originalText;
+      if (btnCopySubject) btnCopySubject.textContent = "Copy";
     }, 1500);
   } catch (err) {
     outreachSubjectInput.select();
     document.execCommand("copy");
-    if (btnCopySubject) btnCopySubject.textContent = "Copied!";
-    setTimeout(() => {
-      if (btnCopySubject) btnCopySubject.textContent = "Copy";
-    }, 1500);
   }
 }
 
-// 10. 1-Click ATS Form Autofill & Screening Answer Assistant (Phase 4)
+// 10. 1-Click ATS Form Autofill & Screening Assistant
 async function fetchCandidateProfile() {
   if (candidateProfileCache) return candidateProfileCache;
   try {
@@ -1157,7 +1144,6 @@ async function fetchCandidateProfile() {
     console.debug("Bridge profile fetch failed, using fallback:", e);
   }
 
-  // Built-in fallback profile
   candidateProfileCache = {
     first_name: "Chinmay",
     last_name: "Maheshwari",
@@ -1186,14 +1172,14 @@ async function fetchCandidateProfile() {
 }
 
 async function handleAutofillForm() {
-  showLoading("Detecting form fields & autofilling application...");
+  showLoading("Detecting form fields & autofilling...");
   if (autofillBanner) autofillBanner.classList.add("hidden");
 
   try {
     const profile = await fetchCandidateProfile();
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.id) {
-      throw new Error("No active browser tab found.");
+      throw new Error("No active tab found.");
     }
 
     chrome.tabs.sendMessage(tab.id, { action: "autofill_form", profile: profile }, (response) => {
@@ -1203,9 +1189,10 @@ async function handleAutofillForm() {
           ? chrome.runtime.lastError.message
           : (response && response.error ? response.error : "Content script unreachable on this page.");
         if (autofillBanner) {
-          autofillBanner.innerHTML = `<span>⚠️</span> <span>${errMsg} (Make sure you are on a supported job application page)</span>`;
+          autofillBanner.textContent = `${errMsg} (Open a job application page)`;
           autofillBanner.classList.remove("hidden");
         }
+        showToast("Open an application form to autofill.", "info");
         return;
       }
 
@@ -1215,14 +1202,15 @@ async function handleAutofillForm() {
 
       if (autofillBanner) {
         if (count > 0) {
-          autofillBanner.innerHTML = `<span>⚡</span> <span><strong>${count} fields filled!</strong> (${fields.join(", ")})</span>`;
+          autofillBanner.textContent = `${count} fields filled: ${fields.join(", ")}`;
         } else {
-          autofillBanner.innerHTML = `<span>ℹ️</span> <span>No empty form fields matched. You may already have filled this form.</span>`;
+          autofillBanner.textContent = "No empty ATS fields detected on this page.";
         }
         autofillBanner.classList.remove("hidden");
       }
 
-      // If open screening questions detected, open the screening assistant!
+      showToast(`${count} fields autofilled!`, "good");
+
       if (questions.length > 0 && screeningCard) {
         screeningCard.classList.remove("hidden");
         const firstQ = questions[0];
@@ -1230,11 +1218,12 @@ async function handleAutofillForm() {
         if (screeningQuestionInput && !screeningQuestionInput.value) {
           screeningQuestionInput.value = firstQ.context || "";
         }
+        updateEmptyStateVisibility();
       }
     });
   } catch (err) {
     hideLoading();
-    alert(`Autofill failed: ${err.message}`);
+    showToast(`Autofill failed: ${err.message}`, "bad");
   }
 }
 
@@ -1248,7 +1237,7 @@ async function handleAnswerScreeningQuestion(questionText) {
 
   if (btnGenerateAnswer) {
     btnGenerateAnswer.disabled = true;
-    btnGenerateAnswer.textContent = "Generating...";
+    btnGenerateAnswer.textContent = "Thinking...";
   }
 
   try {
@@ -1273,22 +1262,23 @@ async function handleAnswerScreeningQuestion(questionText) {
       screeningAnswerTextarea.value = data.answer || "";
     }
     if (screeningSourceTag) {
-      screeningSourceTag.textContent = data.source === "groq" ? "✨ AI Generated (Groq)" : "🎯 Radar Profile Match";
+      screeningSourceTag.textContent = data.source === "groq" ? "AI Generated" : "Profile Match";
     }
     if (screeningAnswerBox) {
       screeningAnswerBox.classList.remove("hidden");
     }
     if (screeningCard) {
       screeningCard.classList.remove("hidden");
-      screeningCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      screeningCard.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   } catch (err) {
-    alert(`Failed to generate screening answer: ${err.message}\nEnsure the bridge daemon is running.`);
+    showToast(`Failed to generate answer: ${err.message}`, "bad");
   } finally {
     if (btnGenerateAnswer) {
       btnGenerateAnswer.disabled = false;
       btnGenerateAnswer.textContent = "Answer";
     }
+    updateEmptyStateVisibility();
   }
 }
 
@@ -1299,29 +1289,22 @@ async function handleCopyScreeningAnswer() {
 
   try {
     await navigator.clipboard.writeText(text);
-    if (copyScreeningIcon) copyScreeningIcon.textContent = "✅";
     if (copyScreeningText) copyScreeningText.textContent = "Copied!";
+    showToast("Answer copied to clipboard!", "good");
     setTimeout(() => {
-      if (copyScreeningIcon) copyScreeningIcon.textContent = "📋";
       if (copyScreeningText) copyScreeningText.textContent = "Copy";
     }, 2000);
   } catch (err) {
     screeningAnswerTextarea.select();
     document.execCommand("copy");
-    if (copyScreeningText) copyScreeningText.textContent = "Copied!";
-    setTimeout(() => {
-      if (copyScreeningText) copyScreeningText.textContent = "Copy";
-    }, 2000);
+    showToast("Copied!", "good");
   }
 }
 
 async function handleInsertScreeningAnswer() {
   if (!screeningAnswerTextarea) return;
   const text = screeningAnswerTextarea.value;
-  if (!text) {
-    alert("No answer text to insert.");
-    return;
-  }
+  if (!text) return;
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id) return;
@@ -1332,18 +1315,54 @@ async function handleInsertScreeningAnswer() {
     value: text,
   }, (response) => {
     if (chrome.runtime.lastError || !response || !response.success) {
-      alert("Could not insert directly into form field. Copied to clipboard instead!");
+      showToast("Could not insert directly. Copied to clipboard instead!", "info");
       handleCopyScreeningAnswer();
     } else {
-      if (btnInsertScreening) {
-        const orig = btnInsertScreening.innerHTML;
-        btnInsertScreening.innerHTML = "<span>✅ Inserted!</span>";
-        setTimeout(() => {
-          btnInsertScreening.innerHTML = orig;
-        }, 2000);
-      }
+      showToast("Answer inserted into field!", "good");
     }
   });
 }
 
+function showLoading(msg) {
+  loadingText.textContent = msg;
+  loadingCard.classList.remove("hidden");
+  updateEmptyStateVisibility();
+}
 
+function hideLoading() {
+  loadingCard.classList.add("hidden");
+  updateEmptyStateVisibility();
+}
+
+// Lightweight Toast Component
+function showToast(message, type = "info", undoCallback = null) {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+
+  const textSpan = document.createElement("span");
+  textSpan.textContent = message;
+  toast.appendChild(textSpan);
+
+  if (undoCallback) {
+    const undoBtn = document.createElement("button");
+    undoBtn.className = "btn-toast-undo";
+    undoBtn.textContent = "Undo";
+    undoBtn.type = "button";
+    undoBtn.addEventListener("click", () => {
+      toast.remove();
+      undoCallback();
+    });
+    toast.appendChild(undoBtn);
+  }
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transition = "opacity 200ms ease";
+    setTimeout(() => toast.remove(), 200);
+  }, 3800);
+}

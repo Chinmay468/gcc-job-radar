@@ -638,9 +638,9 @@ function detectAndFillJobForm(customProfile) {
   const count = uniqueFilled.length;
 
   if (count > 0) {
-    showInPageToast(`✔ Radar Autofill: ${count} fields filled! (${uniqueFilled.slice(0, 3).join(", ")}${count > 3 ? "..." : ""})`);
+    showInPageToast(`Radar Autofill: ${count} fields filled (${uniqueFilled.slice(0, 3).join(", ")}${count > 3 ? "..." : ""})`);
   } else {
-    showInPageToast(`ℹ Radar Autofill: Scanned page, no matching empty fields found.`);
+    showInPageToast(`Radar Autofill: No matching empty fields found.`);
   }
 
   return {
@@ -660,7 +660,7 @@ function fillSpecificField(fieldId, value) {
 
   const ok = setNativeInputValue(target, value);
   if (ok) {
-    showInPageToast("✔ Answer inserted into form field!");
+    showInPageToast("Answer inserted into form field");
   }
   return { filled: ok };
 }

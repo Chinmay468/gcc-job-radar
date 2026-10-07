@@ -3,419 +3,493 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GCC Job Radar & Resume Tailor</title>
+  <title>GCC Job Radar</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="app-container">
-    <!-- Header -->
+    <!-- 1. Header (Compact, 48px) -->
     <header class="header">
       <div class="brand">
-        <div class="logo-radar-wrap" title="GCC Radar Scanning Engine">
-          <svg class="radar-svg" viewBox="0 0 40 40" width="34" height="34" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <radialGradient id="radar-bg-glow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#0284c7" stop-opacity="0.4"/>
-                <stop offset="60%" stop-color="#0369a1" stop-opacity="0.15"/>
-                <stop offset="100%" stop-color="#0b1329" stop-opacity="0.95"/>
-              </radialGradient>
-              <linearGradient id="sweep-beam-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.85"/>
-                <stop offset="50%" stop-color="#06b6d4" stop-opacity="0.35"/>
-                <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
-              </linearGradient>
-            </defs>
-            
-            <!-- Outer Bezel & Dark Background -->
-            <circle cx="20" cy="20" r="19" fill="url(#radar-bg-glow)" stroke="#0284c7" stroke-width="1.2" stroke-opacity="0.8"/>
-            
-            <!-- Concentric Range Rings -->
-            <circle cx="20" cy="20" r="14" fill="none" stroke="#38bdf8" stroke-width="0.75" stroke-opacity="0.35" stroke-dasharray="1.5 2"/>
-            <circle cx="20" cy="20" r="8.5" fill="none" stroke="#38bdf8" stroke-width="0.75" stroke-opacity="0.45"/>
-            <circle cx="20" cy="20" r="3" fill="#38bdf8" fill-opacity="0.2" stroke="#38bdf8" stroke-width="0.75"/>
-
-            <!-- Precision Crosshairs -->
-            <line x1="2" y1="20" x2="38" y2="20" stroke="#38bdf8" stroke-width="0.7" stroke-opacity="0.35"/>
-            <line x1="20" y1="2" x2="20" y2="38" stroke="#38bdf8" stroke-width="0.7" stroke-opacity="0.35"/>
-            
-            <!-- Rotating Sweeper Sector -->
-            <g class="radar-rotating-group">
-              <path d="M 20 20 L 38 20 A 18 18 0 0 0 32.7 7.3 Z" fill="url(#sweep-beam-grad)"/>
-              <line x1="20" y1="20" x2="38" y2="20" stroke="#7dd3fc" stroke-width="1.5" stroke-linecap="round"/>
-            </g>
-            
-            <!-- Dynamic Pulsing Target Blips (Job Leads) -->
-            <circle class="radar-blip blip-1" cx="29" cy="12" r="1.8" fill="#10b981"/>
-            <circle class="radar-blip blip-2" cx="12" cy="27" r="1.4" fill="#38bdf8"/>
-            
-            <!-- Center Bullseye -->
-            <circle cx="20" cy="20" r="1.5" fill="#f8fafc"/>
+        <div class="logo-mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+            <path d="M2 12h20"/>
           </svg>
         </div>
-        <div class="brand-text">
-          <div class="title-row">
-            <h1 class="title">GCC Job Radar</h1>
-            <span class="badge-v">v2.2</span>
-          </div>
-          <p class="subtitle">AI Evaluator & Resume Tailor</p>
-        </div>
+        <span class="brand-title">GCC Job Radar</span>
+        <span class="brand-version">v2.2</span>
       </div>
-      <div id="bridge-status" class="status-badge status-checking" title="Checking local bridge on 127.0.0.1:8765">
-        <span class="status-dot"></span>
-        <span class="status-text">Checking...</span>
+
+      <div class="header-right">
+        <div id="bridge-status" class="status-badge status-checking" title="Checking local bridge on 127.0.0.1:8765">
+          <span class="status-dot"></span>
+          <span class="status-text">Checking...</span>
+        </div>
+
+        <div class="menu-container">
+          <button id="btn-menu-overflow" class="btn-icon-ghost" type="button" aria-label="More actions" title="More actions">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="1"/>
+              <circle cx="19" cy="12" r="1"/>
+              <circle cx="5" cy="12" r="1"/>
+            </svg>
+          </button>
+          <div id="overflow-menu" class="overflow-dropdown hidden">
+            <a id="btn-view-master-pdf" class="menu-item" href="#" title="View base Master Resume PDF">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                <path d="M10 9H8"/>
+                <path d="M16 13H8"/>
+                <path d="M16 17H8"/>
+              </svg>
+              <span>Base Master PDF</span>
+            </a>
+            <button id="btn-reextract" class="menu-item" type="button" title="Re-extract from current page">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                <path d="M16 16h5v5"/>
+              </svg>
+              <span>Refresh from page</span>
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
     <!-- Bridge Warning Banner (hidden when online) -->
     <div id="bridge-warning" class="bridge-warning hidden">
-      <div class="warning-header">
-        <span>⚠️ Local Bridge is offline</span>
-        <button id="btn-retry-bridge" class="btn-text">Retry</button>
+      <div class="warning-body">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" x2="12" y1="8" y2="12"/>
+          <line x1="12" x2="12.01" y1="16" y2="16"/>
+        </svg>
+        <div class="warning-text-wrap">
+          <div class="warning-title">Local Bridge is offline</div>
+          <div class="warning-desc">Run <code>python tools/extension_bridge.py</code> in project root.</div>
+        </div>
       </div>
-      <div class="bridge-help">Run <code>python tools/extension_bridge.py</code> in project root.</div>
+      <button id="btn-retry-bridge" class="btn-text" type="button">Retry</button>
     </div>
 
-    <!-- Active Tab Switch Notification Banner (for Side Panel mode) -->
+    <!-- Active Tab Switch Notification Banner -->
     <div id="tab-switch-banner" class="tab-switch-banner hidden">
-      <div class="tab-info">
-        <span>🔄</span>
-        <span id="tab-switch-title">New tab detected</span>
+      <div class="tab-switch-content">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+          <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+          <path d="M16 16h5v5"/>
+        </svg>
+        <span id="tab-switch-title" class="tab-switch-text">New tab detected</span>
       </div>
-      <button id="btn-tab-switch-load" class="btn-switch-load" type="button">Load Job</button>
+      <button id="btn-tab-switch-load" class="btn-sm btn-accent" type="button">Load Job</button>
     </div>
 
-    <!-- Job Info Input Card -->
-    <section class="card card-input">
-      <div class="card-header">
-        <span class="card-title">
-          <span class="card-title-icon">📋</span> Job Details
-        </span>
-        <div class="card-header-actions">
-          <a id="btn-view-master-pdf" class="btn-text" href="#" title="View base Master Resume PDF">📄 Base Master PDF</a>
-          <button id="btn-reextract" class="btn-text" title="Re-extract from current page">🔄 Refresh from Page</button>
+    <!-- 2. Job Card (Compact & Clean) -->
+    <section class="card job-card">
+      <!-- Auto-extracted summary row with pencil edit -->
+      <div class="job-summary-row">
+        <div class="job-summary-text" id="company-role-summary">
+          <span class="summary-company" id="summary-company">No company detected</span>
+          <span class="summary-dot">·</span>
+          <span class="summary-role" id="summary-title">No role detected</span>
+        </div>
+        <button id="btn-edit-job-meta" class="btn-icon-ghost" type="button" aria-label="Edit company and role" title="Edit company and role">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>
+            <path d="m15 5 4 4"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Expandable inputs for manual editing -->
+      <div id="job-meta-inputs" class="job-meta-inputs hidden">
+        <div class="form-grid">
+          <div class="input-wrap">
+            <input type="text" id="input-company" class="input-text" placeholder="Company" aria-label="Company name">
+          </div>
+          <div class="input-wrap">
+            <input type="text" id="input-title" class="input-text" placeholder="Role / title" aria-label="Role title">
+          </div>
         </div>
       </div>
 
-      <div class="form-row">
-        <div class="form-group flex-1">
-          <label for="input-company">Company</label>
-          <input type="text" id="input-company" placeholder="e.g. Visa, Mastercard, Potpie AI">
-        </div>
-        <div class="form-group flex-1">
-          <label for="input-title">Role / Title</label>
-          <input type="text" id="input-title" placeholder="e.g. Software Engineer, Java Dev">
-        </div>
-      </div>
-
-      <!-- Company Radar Status & Direct ATS Action Bar (Phase 2) -->
+      <!-- Company Radar Intelligence & Direct ATS Action Bar -->
       <div id="company-intelligence-bar" class="company-intelligence-bar hidden">
         <div class="ci-status-row">
           <div class="ci-badge-wrap">
-            <span id="ci-status-badge" class="ci-badge ci-badge-monitored">🎯 Monitored GCC</span>
+            <span id="ci-status-badge" class="ci-badge ci-badge-monitored">Monitored GCC</span>
             <span id="ci-history-text" class="ci-history-text">3 active roles in Radar DB</span>
           </div>
           <div class="ci-action-wrap">
             <a id="btn-direct-ats" class="btn-direct-ats" href="#" target="_blank" rel="noopener noreferrer" title="Jump directly to official company career portal">
-              <span id="btn-direct-ats-icon">⚡</span>
+              <span id="btn-direct-ats-icon" class="btn-ats-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 3h6v6"/>
+                  <path d="10 14 21 3"/>
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                </svg>
+              </span>
               <span id="btn-direct-ats-label">Official ATS</span>
-              <span class="direct-arrow">↗</span>
             </a>
           </div>
         </div>
       </div>
 
-      <div class="form-group">
-        <div class="jd-header-label">
-          <div class="jd-label-meta">
-            <label for="input-jd">Job Description</label>
-            <span id="jd-char-count" class="char-count">0 chars</span>
-          </div>
-          <button id="btn-toggle-jd" class="btn-toggle-compact" type="button" title="Toggle compact/expanded view">
-            <span id="toggle-jd-icon">↕️</span> <span id="toggle-jd-text">Collapse</span>
+      <!-- Job Description Section -->
+      <div class="jd-section">
+        <div class="jd-header-bar">
+          <button id="btn-toggle-jd" class="btn-toggle-jd" type="button" aria-label="Toggle job description">
+            <svg id="toggle-jd-icon" class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+            <span id="toggle-jd-text">Job description</span>
           </button>
+          <span id="jd-char-count" class="char-count">0 chars</span>
         </div>
         <div id="jd-textarea-wrap" class="jd-textarea-wrap">
-          <textarea id="input-jd" rows="4" placeholder="Paste JD or browse to any job page to auto-extract..."></textarea>
+          <textarea id="input-jd" rows="4" placeholder="Paste a job description, or open a job page to auto-extract."></textarea>
         </div>
       </div>
-
-      <!-- Action Buttons -->
-      <div class="button-group">
-        <button id="btn-evaluate" class="btn btn-secondary btn-evaluate" title="Run fast rule checks & AI deep evaluation">
-          <span class="btn-icon">⚡</span> <span>Evaluate Fit</span>
-        </button>
-        <button id="btn-tailor" class="btn btn-primary btn-tailor" title="Tailor resume bullets & compile PDF with local Tectonic engine">
-          <span class="btn-icon">✨</span> <span>Tailor</span>
-        </button>
-        <button id="btn-outreach" class="btn btn-secondary btn-outreach" title="Generate tailored recruiter InMail, LinkedIn note & cold outreach">
-          <span class="btn-icon">✉️</span> <span>Outreach</span>
-        </button>
-        <button id="btn-autofill" class="btn btn-secondary btn-autofill" title="1-Click ATS Application Autofill (Greenhouse, Lever, Ashby, Workday)">
-          <span class="btn-icon">⚡</span> <span>Autofill</span>
-        </button>
-        <button id="btn-dismiss-main" class="btn btn-danger-outline btn-dismiss" title="Dismiss this job & company from radar">
-          <span class="btn-icon">🗑️</span> <span>Dismiss</span>
-        </button>
-      </div>
-
-      <!-- Autofill Feedback Banner -->
-      <div id="autofill-banner" class="autofill-banner hidden"></div>
-
-      <!-- Dismiss Notification Banner -->
-      <div id="dismiss-banner" class="dismiss-banner hidden"></div>
     </section>
 
-    <!-- Progress / Loading Indicator -->
-    <div id="loading-card" class="card loading-card hidden">
-      <div class="spinner-ring">
-        <div class="spinner-core"></div>
-      </div>
-      <div id="loading-text" class="loading-text">Analyzing job description...</div>
-    </div>
+    <!-- 3. Actions Section -->
+    <section class="actions-section">
+      <!-- Primary Action: Evaluate Fit -->
+      <button id="btn-evaluate" class="btn btn-primary btn-evaluate-full" type="button" aria-label="Evaluate fit">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="6"/>
+          <circle cx="12" cy="12" r="2"/>
+        </svg>
+        <span class="btn-text-label">Evaluate fit</span>
+      </button>
 
-    <!-- Evaluation Results Card -->
-    <section id="eval-card" class="card eval-card hidden">
-      <div class="card-header">
-        <div class="eval-header-title">
-          <span class="card-title">
-            <span class="card-title-icon">🎯</span> Fit Evaluation
-          </span>
-          <span id="verdict-badge" class="verdict-badge verdict-apply">APPLY</span>
-        </div>
-        <div class="card-header-actions">
-          <button id="btn-dismiss-eval" class="btn-text btn-dismiss-link" title="Dismiss this job/company from future radar alerts">🗑️ Dismiss Job</button>
-        </div>
-      </div>
-
-      <!-- Radial Circular Score Gauge & Meta -->
-      <div class="score-gauge-card">
-        <div class="gauge-wrap" title="Calculated Fit Score">
-          <svg class="score-gauge-svg" viewBox="0 0 76 76" width="76" height="76">
-            <circle class="gauge-bg" cx="38" cy="38" r="32" stroke-width="6" fill="none"/>
-            <circle id="gauge-fill" class="gauge-fill" cx="38" cy="38" r="32" stroke-width="6" fill="none"
-                    stroke-dasharray="201" stroke-dashoffset="30" stroke-linecap="round"/>
+      <!-- Secondary Action Grid (3-column, equal width) -->
+      <div class="secondary-grid">
+        <button id="btn-tailor" class="btn btn-secondary" type="button" aria-label="Tailor resume">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
           </svg>
-          <div class="gauge-center-text">
-            <span id="score-val" class="gauge-score">95</span>
-            <span class="gauge-denom">/100</span>
+          <span>Tailor</span>
+        </button>
+
+        <button id="btn-outreach" class="btn btn-secondary" type="button" aria-label="Outreach messages">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="20" height="16" x="2" y="4" rx="2"/>
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+          </svg>
+          <span>Outreach</span>
+        </button>
+
+        <button id="btn-autofill" class="btn btn-secondary" type="button" aria-label="Autofill form">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 21 9-9"/>
+            <path d="M12.2 6.2 11 5"/>
+            <path d="M15 4V2"/>
+            <path d="M15 16v-2"/>
+            <path d="M8 9h2"/>
+            <path d="M20 9h2"/>
+            <path d="m17.8 11.8 1.2 1.2"/>
+            <path d="m17.8 6.2 1.2-1.2"/>
+          </svg>
+          <span>Autofill</span>
+        </button>
+      </div>
+
+      <!-- Low-emphasis dismiss button -->
+      <div class="dismiss-row">
+        <button id="btn-dismiss-main" class="btn-ghost-dismiss" type="button" aria-label="Dismiss job">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"/>
+            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+          </svg>
+          <span>Dismiss job</span>
+        </button>
+      </div>
+
+      <!-- Feedback Banners -->
+      <div id="autofill-banner" class="status-banner banner-autofill hidden"></div>
+      <div id="dismiss-banner" class="status-banner banner-dismiss hidden"></div>
+    </section>
+
+    <!-- 4. Results Area (Fills remaining height, scrolls internally) -->
+    <main class="results-area" id="results-area">
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon-wrap" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <circle cx="12" cy="12" r="6"/>
+            <circle cx="12" cy="12" r="2"/>
+          </svg>
+        </div>
+        <div class="empty-title">No evaluation yet</div>
+        <p class="empty-desc">Evaluate this job to see your fit score, matched skills and gaps.</p>
+      </div>
+
+      <!-- Loading Skeleton Indicator -->
+      <div id="loading-card" class="loading-skeleton-card hidden">
+        <div class="skeleton-ring-row">
+          <div class="skeleton-circle shimmer"></div>
+          <div class="skeleton-text-group">
+            <div class="skeleton-line shimmer" style="width: 70%; height: 16px;"></div>
+            <div class="skeleton-line shimmer" style="width: 90%; height: 12px; margin-top: 6px;"></div>
           </div>
         </div>
-        <div class="score-meta">
-          <div id="one-line-reason" class="one-line-reason">Strong match on core Java/Spring Boot stack.</div>
-          <div id="apply-action" class="apply-action">Apply with Java Backend profile.</div>
+        <div class="skeleton-pill-row" style="margin-top: 14px;">
+          <div class="skeleton-pill shimmer" style="width: 60px;"></div>
+          <div class="skeleton-pill shimmer" style="width: 80px;"></div>
+          <div class="skeleton-pill shimmer" style="width: 70px;"></div>
         </div>
+        <div id="loading-text" class="loading-label">Analyzing job description...</div>
       </div>
 
-      <!-- Skill Pills -->
-      <div id="matched-skills-container" class="skills-block hidden">
-        <div class="skills-title">
-          <span class="skills-icon">✔</span> Matched Stack
+      <!-- Fit Evaluation Results Card -->
+      <section id="eval-card" class="card eval-card hidden">
+        <div class="card-header">
+          <div class="card-title-wrap">
+            <span class="card-title">Fit Evaluation</span>
+            <span id="verdict-badge" class="verdict-badge verdict-apply">Strong Fit</span>
+          </div>
+          <button id="btn-dismiss-eval" class="btn-text-danger" type="button" title="Dismiss this job from radar">Dismiss</button>
         </div>
-        <div id="matched-skills" class="pill-group"></div>
-      </div>
 
-      <div id="missing-skills-container" class="skills-block hidden">
-        <div class="skills-title">
-          <span class="skills-icon warning">⚠</span> Missing / New Skills
+        <!-- Score Ring & Meta -->
+        <div class="score-card-layout">
+          <div class="gauge-wrap" title="Fit Score">
+            <svg class="score-gauge-svg" viewBox="0 0 76 76" width="72" height="72">
+              <circle class="gauge-bg" cx="38" cy="38" r="32" stroke-width="5" fill="none"/>
+              <circle id="gauge-fill" class="gauge-fill" cx="38" cy="38" r="32" stroke-width="5" fill="none"
+                      stroke-dasharray="201" stroke-dashoffset="30" stroke-linecap="round"/>
+            </svg>
+            <div class="gauge-center-text">
+              <span id="score-val" class="gauge-score">95</span>
+              <span class="gauge-denom">/100</span>
+            </div>
+          </div>
+          <div class="score-meta">
+            <div id="one-line-reason" class="one-line-reason">Strong match on core Java/Spring Boot stack.</div>
+            <div id="apply-action" class="apply-action">Apply with Java Backend profile.</div>
+          </div>
         </div>
-        <div id="missing-skills" class="pill-group"></div>
-      </div>
 
-      <!-- Flags -->
-      <div id="green-flags-container" class="flags-block hidden">
-        <ul id="green-flags-list" class="flags-list green-flags"></ul>
-      </div>
-
-      <div id="hard-blocks-container" class="flags-block hidden">
-        <ul id="hard-blocks-list" class="flags-list hard-blocks"></ul>
-      </div>
-
-      <div id="warnings-container" class="flags-block hidden">
-        <ul id="warnings-list" class="flags-list warnings"></ul>
-      </div>
-    </section>
-
-    <!-- Recruiter Outreach & InMail Studio (Phase 3) -->
-    <section id="outreach-card" class="card outreach-card hidden">
-      <div class="card-header">
-        <div class="outreach-header-title">
-          <span class="card-title">
-            <span class="card-title-icon">✉️</span> Recruiter Outreach
-          </span>
-          <span class="badge-v">1-Click</span>
+        <!-- Matched Skills -->
+        <div id="matched-skills-container" class="skills-block hidden">
+          <div class="skills-heading">Matched Stack</div>
+          <div id="matched-skills" class="chip-group"></div>
         </div>
-        <div class="card-header-actions">
-          <a id="btn-search-recruiters" class="btn-text search-recruiters-link" href="#" target="_blank" title="Find recruiters for this company on LinkedIn">
-            🔍 Find Recruiters on LinkedIn ↗
+
+        <!-- Missing Skills -->
+        <div id="missing-skills-container" class="skills-block hidden">
+          <div class="skills-heading">Missing / New Skills</div>
+          <div id="missing-skills" class="chip-group"></div>
+        </div>
+
+        <!-- Analysis Flags -->
+        <div id="green-flags-container" class="flags-block hidden">
+          <ul id="green-flags-list" class="flags-list green-flags"></ul>
+        </div>
+
+        <div id="hard-blocks-container" class="flags-block hidden">
+          <ul id="hard-blocks-list" class="flags-list hard-blocks"></ul>
+        </div>
+
+        <div id="warnings-container" class="flags-block hidden">
+          <ul id="warnings-list" class="flags-list warnings"></ul>
+        </div>
+      </section>
+
+      <!-- Recruiter Outreach & InMail Studio (Phase 3) -->
+      <section id="outreach-card" class="card outreach-card hidden">
+        <div class="card-header">
+          <div class="card-title-wrap">
+            <span class="card-title">Recruiter Outreach</span>
+          </div>
+          <a id="btn-search-recruiters" class="btn-text" href="#" target="_blank" rel="noopener noreferrer" title="Find recruiters on LinkedIn">
+            <span>Find Recruiters</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h6v6"/>
+              <path d="10 14 21 3"/>
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            </svg>
           </a>
         </div>
-      </div>
 
-      <!-- Outreach Format Tabs -->
-      <div class="outreach-controls">
-        <div class="outreach-type-tabs">
-          <button id="tab-outreach-linkedin" class="outreach-tab active" data-type="linkedin" type="button">
-            🤝 LinkedIn (<300c)
-          </button>
-          <button id="tab-outreach-email" class="outreach-tab" data-type="email" type="button">
-            📧 Cold Email / InMail
-          </button>
-          <button id="tab-outreach-referral" class="outreach-tab" data-type="referral" type="button">
-            ☕ Referral Request
-          </button>
-        </div>
-
-        <div class="outreach-audience-row">
-          <span class="audience-label">Audience:</span>
-          <div class="audience-pill-group">
-            <button class="audience-pill active" data-audience="recruiter" type="button">Recruiter / HR</button>
-            <button class="audience-pill" data-audience="hiring_manager" type="button">Hiring Manager</button>
-            <button class="audience-pill" data-audience="peer_engineer" type="button">Team Engineer</button>
+        <!-- Outreach Format Tabs -->
+        <div class="outreach-controls">
+          <div class="outreach-type-tabs">
+            <button id="tab-outreach-linkedin" class="outreach-tab active" data-type="linkedin" type="button">LinkedIn (&lt;300c)</button>
+            <button id="tab-outreach-email" class="outreach-tab" data-type="email" type="button">Email / InMail</button>
+            <button id="tab-outreach-referral" class="outreach-tab" data-type="referral" type="button">Referral</button>
           </div>
-        </div>
-      </div>
 
-      <!-- Outreach Message Display Area -->
-      <div class="outreach-display-box">
-        <!-- Subject row for email mode -->
-        <div id="outreach-subject-row" class="outreach-subject-row hidden">
-          <label class="outreach-subject-label">Subject:</label>
-          <div class="subject-input-wrap">
-            <input type="text" id="outreach-subject-input" readonly>
-            <button id="btn-copy-subject" class="btn-text btn-copy-mini" type="button" title="Copy Subject">Copy</button>
-          </div>
-        </div>
-
-        <div class="outreach-body-wrap">
-          <textarea id="outreach-body-textarea" rows="6" readonly></textarea>
-        </div>
-
-        <div class="outreach-meta-row">
-          <span id="outreach-char-count" class="outreach-char-count">0 / 300 chars</span>
-          <div class="outreach-actions-right">
-            <button id="btn-copy-outreach" class="btn btn-primary btn-copy-outreach" type="button">
-              <span id="copy-outreach-icon">📋</span> <span id="copy-outreach-text">Copy Note</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ATS Screening Question Assistant (Phase 4) -->
-    <section id="screening-card" class="card screening-card hidden">
-      <div class="card-header">
-        <div class="screening-header-title">
-          <span class="card-title">
-            <span class="card-title-icon">🤖</span> Screening Answer Assistant
-          </span>
-          <span class="badge-v">AI / ATS</span>
-        </div>
-        <div class="card-header-actions">
-          <button id="btn-close-screening" class="btn-text btn-close-screening" title="Close">✕</button>
-        </div>
-      </div>
-
-      <div class="screening-controls">
-        <div class="quick-questions-label">Quick Screening Prompts:</div>
-        <div class="quick-chips-group">
-          <button class="chip-btn" data-q="Why do you want to work at this company?" type="button">🌟 Why Company?</button>
-          <button class="chip-btn" data-q="What is your current notice period and earliest joining date?" type="button">⏱ Notice Period</button>
-          <button class="chip-btn" data-q="Describe your hands-on experience with Java and Spring Boot." type="button">⚡ Java/Spring Stack</button>
-          <button class="chip-btn" data-q="Are you legally authorized to work, and do you require visa sponsorship?" type="button">📜 Work Auth / Visa</button>
-          <button class="chip-btn" data-q="Are you open and willing to relocate for this position?" type="button">📍 Relocation</button>
-          <button class="chip-btn" data-q="What are your compensation / salary expectations?" type="button">💰 Salary Expectations</button>
-        </div>
-
-        <div class="screening-input-wrap">
-          <input type="text" id="screening-question-input" placeholder="Paste any screening question from the application form..." />
-          <button id="btn-generate-answer" class="btn btn-primary btn-generate-answer" type="button">Answer</button>
-        </div>
-
-        <div id="screening-answer-box" class="screening-answer-box hidden">
-          <textarea id="screening-answer-textarea" rows="4"></textarea>
-          <div class="screening-actions-row">
-            <span id="screening-source-tag" class="screening-source-tag">AI Generated</span>
-            <div class="screening-btns-right">
-              <button id="btn-copy-screening" class="btn btn-secondary btn-sm" type="button">
-                <span id="copy-screening-icon">📋</span> <span id="copy-screening-text">Copy</span>
-              </button>
-              <button id="btn-insert-screening" class="btn btn-primary btn-sm" type="button" title="Insert answer directly into active form field on page">
-                <span>⚡ Insert into Page</span>
-              </button>
+          <div class="audience-row">
+            <span class="audience-label">Audience:</span>
+            <div class="audience-pill-group">
+              <button class="audience-pill active" data-audience="recruiter" type="button">Recruiter</button>
+              <button class="audience-pill" data-audience="hiring_manager" type="button">Manager</button>
+              <button class="audience-pill" data-audience="peer_engineer" type="button">Engineer</button>
             </div>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- Tailored Resume Preview & Refinement Studio -->
-    <section id="tailor-card" class="card tailor-card hidden">
-      <div class="tailor-header">
-        <div class="tailor-header-left">
-          <span class="tailor-icon">📄</span>
-          <div>
-            <div class="tailor-title" id="preview-status-title">Resume Preview (Live Tectonic Compile)</div>
-            <div id="tailor-filename" class="tailor-subtitle">Chinmay_Maheshwari_Resume.pdf</div>
+        <!-- Outreach Display Box -->
+        <div class="outreach-display-box">
+          <div id="outreach-subject-row" class="outreach-subject-row hidden">
+            <label class="field-label" for="outreach-subject-input">Subject:</label>
+            <div class="copy-input-row">
+              <input type="text" id="outreach-subject-input" class="input-text" readonly>
+              <button id="btn-copy-subject" class="btn-sm btn-secondary" type="button">Copy</button>
+            </div>
+          </div>
+
+          <div class="outreach-body-wrap">
+            <textarea id="outreach-body-textarea" rows="5" readonly></textarea>
+          </div>
+
+          <div class="outreach-footer-row">
+            <span id="outreach-char-count" class="mono-counter">0 / 300 chars</span>
+            <button id="btn-copy-outreach" class="btn-sm btn-accent" type="button">
+              <svg id="copy-outreach-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+              </svg>
+              <span id="copy-outreach-text">Copy Note</span>
+            </button>
           </div>
         </div>
-        <div class="tailor-header-right">
-          <a id="btn-open-full-tab" class="btn-text preview-tab-link" href="#" target="_blank" title="Open full resolution PDF in new browser tab">
-            🔍 Open in Full Tab
+      </section>
+
+      <!-- ATS Screening Question Assistant (Phase 4) -->
+      <section id="screening-card" class="card screening-card hidden">
+        <div class="card-header">
+          <div class="card-title-wrap">
+            <span class="card-title">Screening Answer Assistant</span>
+          </div>
+          <button id="btn-close-screening" class="btn-icon-ghost" type="button" aria-label="Close screening assistant">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18"/>
+              <path d="m6 6 12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="screening-controls">
+          <div class="quick-questions-label">Common Screening Prompts:</div>
+          <div class="quick-chips-group">
+            <button class="chip-btn" data-q="Why do you want to work at this company?" type="button">Why Company?</button>
+            <button class="chip-btn" data-q="What is your current notice period and earliest joining date?" type="button">Notice Period</button>
+            <button class="chip-btn" data-q="Describe your hands-on experience with Java and Spring Boot." type="button">Java / Spring Stack</button>
+            <button class="chip-btn" data-q="Are you legally authorized to work, and do you require visa sponsorship?" type="button">Work Auth / Visa</button>
+            <button class="chip-btn" data-q="Are you open and willing to relocate for this position?" type="button">Relocation</button>
+            <button class="chip-btn" data-q="What are your compensation / salary expectations?" type="button">Salary</button>
+          </div>
+
+          <div class="screening-input-wrap">
+            <input type="text" id="screening-question-input" class="input-text" placeholder="Paste any question from the application form..." />
+            <button id="btn-generate-answer" class="btn-sm btn-accent" type="button">Answer</button>
+          </div>
+
+          <div id="screening-answer-box" class="screening-answer-box hidden">
+            <textarea id="screening-answer-textarea" rows="4"></textarea>
+            <div class="screening-actions-row">
+              <span id="screening-source-tag" class="source-tag">AI Generated</span>
+              <div class="screening-btns-right">
+                <button id="btn-copy-screening" class="btn-sm btn-secondary" type="button">
+                  <svg id="copy-screening-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                  </svg>
+                  <span id="copy-screening-text">Copy</span>
+                </button>
+                <button id="btn-insert-screening" class="btn-sm btn-accent" type="button" title="Insert answer directly into active form field">
+                  <span>Insert into Page</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tailored Resume Preview & Refinement Studio -->
+      <section id="tailor-card" class="card tailor-card hidden">
+        <div class="card-header">
+          <div class="card-title-wrap">
+            <div class="card-title" id="preview-status-title">Resume Preview</div>
+            <div id="tailor-filename" class="card-subtitle">Chinmay_Maheshwari_Resume.pdf</div>
+          </div>
+          <a id="btn-open-full-tab" class="btn-text" href="#" target="_blank" title="Open full resolution PDF in new browser tab">
+            <span>Open in Tab</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h6v6"/>
+              <path d="10 14 21 3"/>
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            </svg>
           </a>
         </div>
-      </div>
 
-      <!-- Live PDF Preview Frame -->
-      <div class="preview-frame-container">
-        <iframe id="pdf-preview-frame" class="pdf-preview-frame" src="" title="Resume Preview"></iframe>
-        <div class="preview-overlay-info">
-          <span>💡 Live PDF preview. Click "Open in Full Tab" for zoom & multi-page view.</span>
+        <!-- PDF Preview Frame -->
+        <div class="preview-frame-container">
+          <iframe id="pdf-preview-frame" class="pdf-preview-frame" src="" title="Resume Preview"></iframe>
         </div>
-      </div>
 
-      <!-- Refinement / Feedback Loop Section -->
-      <div class="refine-container">
-        <div class="refine-header">
-          <label for="input-feedback" class="refine-label">
-            <span>✨ Suggest Changes / Tweaks to Resume</span>
-          </label>
+        <!-- Refinement Section -->
+        <div class="refine-container">
+          <label for="input-feedback" class="field-label">Suggest Changes to Resume:</label>
+          <textarea id="input-feedback" rows="2" placeholder="e.g. Emphasize Kafka & Redis locking. Mention Docker in Skill-Bridge..."></textarea>
+          <div class="refine-actions-row">
+            <button id="btn-refine" class="btn-sm btn-secondary" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                <path d="M16 16h5v5"/>
+              </svg>
+              <span>Refine Preview</span>
+            </button>
+            <div id="refine-status" class="refine-status hidden"></div>
+          </div>
         </div>
-        <textarea id="input-feedback" rows="2" placeholder="e.g. Emphasize Kafka, Redis locking & system design in summary. Swap project order. Mention Docker deployment in Skill-Bridge..."></textarea>
-        
-        <div class="refine-actions">
-          <button id="btn-refine" class="btn btn-secondary">
-            <span class="btn-icon">🔄</span> Refine & Refresh Preview
+
+        <!-- Download & Application Logging -->
+        <div class="tailor-footer-actions">
+          <button id="btn-confirm-download" class="btn btn-good btn-full" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" x2="12" y1="15" y2="3"/>
+            </svg>
+            <span>Download Tailored PDF</span>
           </button>
+          <div class="tailor-sub-actions">
+            <button id="btn-view-diff" class="btn-sm btn-secondary flex-1" type="button">View Diff</button>
+            <button id="btn-mark-applied" class="btn-sm btn-secondary flex-1" type="button">Mark Applied</button>
+          </div>
         </div>
-        <div id="refine-status" class="refine-status hidden"></div>
-      </div>
 
-      <!-- Final Actions (Download & Track) -->
-      <div class="tailor-actions">
-        <button id="btn-confirm-download" class="btn btn-success">
-          <span class="btn-icon">⬇️</span> Looks Good, Download PDF
-        </button>
-        <div class="secondary-actions">
-          <button id="btn-view-diff" class="btn btn-outline flex-1">
-            <span>👀 View Diff</span>
-          </button>
-          <button id="btn-mark-applied" class="btn btn-outline flex-1">
-            <span>✅ Mark Applied in Radar</span>
-          </button>
+        <!-- Unified Diff -->
+        <div id="diff-container" class="diff-container hidden">
+          <div class="diff-header">Unified Diff (Tailored vs Baseline)</div>
+          <pre id="diff-content" class="diff-pre"></pre>
         </div>
-      </div>
+      </section>
+    </main>
 
-      <!-- Collapsible Diff View -->
-      <div id="diff-container" class="diff-container hidden">
-        <div class="diff-header">Unified Diff (Tailored vs Baseline)</div>
-        <pre id="diff-content" class="diff-pre"></pre>
-      </div>
-    </section>
+    <!-- Toast Component -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-    <!-- Footer Stats -->
+    <!-- 5. Sticky Footer (36px) -->
     <footer class="footer">
-      <div id="footer-db-stats">Radar DB: Connected</div>
-      <div class="footer-compiler">Engine: Tectonic (1.4s)</div>
+      <div id="footer-db-stats" class="footer-stats">Radar DB: Connected</div>
+      <div class="footer-compiler">Engine: Tectonic · 1.4s</div>
     </footer>
   </div>
 
