@@ -328,3 +328,129 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
   return true; // Keep channel open for async response
 });
+
+// Floating Quick Badge on Job Pages (Phase 2)
+async function initFloatingRadarBadge() {
+  if (document.getElementById("gcc-radar-badge-host")) return;
+
+  setTimeout(async () => {
+    try {
+      const details = extractJobDetails();
+      if (!details || !details.company) return;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1200);
+
+      const queryUrl = `http://127.0.0.1:8765/lookup_company?company=${encodeURIComponent(details.company)}&title=${encodeURIComponent(details.title || "")}&url=${encodeURIComponent(window.location.href)}`;
+      const res = await fetch(queryUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || !data.found || (!data.monitored && !data.db_info?.applied)) return;
+
+      const host = document.createElement("div");
+      host.id = "gcc-radar-badge-host";
+      host.style.all = "initial";
+      host.style.position = "fixed";
+      host.style.bottom = "18px";
+      host.style.right = "18px";
+      host.style.zIndex = "2147483647";
+      host.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+      const shadow = host.attachShadow({ mode: "open" });
+      const badgeBg = "rgba(11, 19, 41, 0.94)";
+      const borderClr = data.db_info?.applied
+        ? "rgba(16, 185, 129, 0.45)"
+        : (data.db_info?.is_dismissed ? "rgba(244, 63, 94, 0.45)" : "rgba(56, 189, 248, 0.4)");
+
+      shadow.innerHTML = `
+        <style>
+          .radar-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: ${badgeBg};
+            border: 1px solid ${borderClr};
+            border-radius: 9999px;
+            padding: 6px 12px 6px 10px;
+            box-shadow: 0 8px 24px -2px rgba(0, 0, 0, 0.65), 0 0 12px rgba(56, 189, 248, 0.2);
+            color: #f8fafc;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            backdrop-filter: blur(12px);
+            user-select: none;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+          }
+          .radar-pill:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px -2px rgba(0, 0, 0, 0.75), 0 0 16px rgba(56, 189, 248, 0.35);
+          }
+          .radar-icon {
+            font-size: 13px;
+          }
+          .radar-text {
+            color: #e2e8f0;
+          }
+          .radar-direct-btn {
+            background: linear-gradient(135deg, #0284c7, #4f46e5);
+            color: #ffffff;
+            border: none;
+            border-radius: 9999px;
+            padding: 2.5px 8px;
+            font-size: 10.5px;
+            font-weight: 700;
+            text-decoration: none;
+            margin-left: 2px;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            transition: opacity 0.15s ease;
+          }
+          .radar-direct-btn:hover {
+            opacity: 0.9;
+          }
+          .close-btn {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 13px;
+            line-height: 1;
+            padding: 0 0 0 4px;
+            cursor: pointer;
+          }
+          .close-btn:hover {
+            color: #f8fafc;
+          }
+        </style>
+        <div class="radar-pill" title="Click to open GCC Job Radar Side Panel">
+          <span class="radar-icon">🎯</span>
+          <span class="radar-text">${data.badge_label}</span>
+          ${data.direct_ats_url ? `<a class="radar-direct-btn" href="${data.direct_ats_url}" target="_blank" rel="noopener noreferrer">Direct ATS ↗</a>` : ""}
+          <button class="close-btn" title="Dismiss badge">×</button>
+        </div>
+      `;
+
+      shadow.querySelector(".radar-pill").addEventListener("click", (e) => {
+        if (e.target.closest(".radar-direct-btn") || e.target.closest(".close-btn")) return;
+        chrome.runtime.sendMessage({ action: "open_side_panel" });
+      });
+
+      shadow.querySelector(".close-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        host.remove();
+      });
+
+      document.body.appendChild(host);
+    } catch (e) {
+      // Silently ignore if bridge is offline or aborted
+    }
+  }, 1200);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initFloatingRadarBadge);
+} else {
+  initFloatingRadarBadge();
+}

@@ -50,3 +50,14 @@ chrome.action.onClicked.addListener(async (tab) => {
     }
   }
 });
+
+// Allow content scripts or in-page badge to trigger opening Side Panel
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message && message.action === "open_side_panel" && sender && sender.tab && sender.tab.windowId) {
+    if (chrome.sidePanel && chrome.sidePanel.open) {
+      chrome.sidePanel.open({ windowId: sender.tab.windowId }).catch((err) => {
+        console.warn("Could not open side panel from page:", err);
+      });
+    }
+  }
+});

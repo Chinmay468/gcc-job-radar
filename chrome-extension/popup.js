@@ -20,6 +20,14 @@ const jdTextareaWrap = document.getElementById("jd-textarea-wrap");
 const toggleJdText = document.getElementById("toggle-jd-text");
 const toggleJdIcon = document.getElementById("toggle-jd-icon");
 
+// Company Radar Intelligence & Direct ATS Elements (Phase 2)
+const companyIntelligenceBar = document.getElementById("company-intelligence-bar");
+const ciStatusBadge = document.getElementById("ci-status-badge");
+const ciHistoryText = document.getElementById("ci-history-text");
+const btnDirectAts = document.getElementById("btn-direct-ats");
+const btnDirectAtsIcon = document.getElementById("btn-direct-ats-icon");
+const btnDirectAtsLabel = document.getElementById("btn-direct-ats-label");
+
 // Side Panel tab switch elements
 const tabSwitchBanner = document.getElementById("tab-switch-banner");
 const tabSwitchTitle = document.getElementById("tab-switch-title");
@@ -121,6 +129,25 @@ function setupEventListeners() {
     });
   }
 
+  if (inputCompany) {
+    inputCompany.addEventListener("input", () => {
+      const comp = inputCompany.value.trim();
+      if (comp) {
+        lookupAndRenderCompany(comp, inputTitle.value.trim(), currentActiveUrl);
+      } else if (companyIntelligenceBar) {
+        companyIntelligenceBar.classList.add("hidden");
+      }
+    });
+  }
+
+  if (btnDirectAts) {
+    btnDirectAts.addEventListener("click", (e) => {
+      e.preventDefault();
+      const href = btnDirectAts.getAttribute("data-url");
+      if (href) openUrlInTab(href);
+    });
+  }
+
   if (btnTabSwitchLoad) {
     btnTabSwitchLoad.addEventListener("click", async () => {
       if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
@@ -128,6 +155,7 @@ function setupEventListeners() {
       inputCompany.value = "";
       inputTitle.value = "";
       inputJd.value = "";
+      if (companyIntelligenceBar) companyIntelligenceBar.classList.add("hidden");
       evalCard.classList.add("hidden");
       tailorCard.classList.add("hidden");
       await loadJobFromActiveTab();
@@ -212,6 +240,9 @@ async function loadJobFromActiveTab() {
         guessCompanyAndRole(stored.page_title);
       }
       updateCharCount();
+      if (inputCompany.value) {
+        lookupAndRenderCompany(inputCompany.value.trim(), inputTitle.value.trim(), currentActiveUrl);
+      }
       chrome.storage.local.remove(["selected_jd_text"]);
       return;
     }
@@ -236,9 +267,58 @@ async function loadJobFromActiveTab() {
         inputJd.value = data.jd_text;
         updateCharCount();
       }
+      if (inputCompany.value) {
+        lookupAndRenderCompany(inputCompany.value.trim(), inputTitle.value.trim(), currentActiveUrl);
+      }
     });
   } catch (e) {
     console.warn("Could not query tab:", e);
+  }
+}
+
+// 2b. Lookup Company Radar Intelligence & Direct ATS Portal (Phase 2)
+async function lookupAndRenderCompany(company, title, url) {
+  if (!company || !companyIntelligenceBar) return;
+  try {
+    const queryUrl = `${BRIDGE_URL}/lookup_company?company=${encodeURIComponent(company)}&title=${encodeURIComponent(title || "")}&url=${encodeURIComponent(url || currentActiveUrl || "")}`;
+    const res = await fetch(queryUrl, { method: "GET" });
+    if (!res.ok) return;
+
+    const data = await res.json();
+    if (!data || !data.found) {
+      companyIntelligenceBar.classList.add("hidden");
+      return;
+    }
+
+    // Set badge style and label
+    const badgeType = data.badge_type || (data.monitored ? "monitored" : "unmonitored");
+    ciStatusBadge.className = `ci-badge ci-badge-${badgeType}`;
+    ciStatusBadge.textContent = data.badge_label;
+    ciHistoryText.textContent = data.history_text || "";
+
+    // Set Direct ATS button
+    if (data.direct_ats_url) {
+      btnDirectAts.setAttribute("data-url", data.direct_ats_url);
+      btnDirectAts.href = data.direct_ats_url;
+      if (btnDirectAtsLabel) {
+        btnDirectAtsLabel.textContent = data.direct_ats_label || "Official ATS";
+      }
+
+      if (data.is_3rd_party_aggregator && data.monitored) {
+        btnDirectAts.classList.add("pulse-aggregator");
+        btnDirectAts.title = "Direct official ATS board detected! Click to bypass third-party aggregator.";
+      } else {
+        btnDirectAts.classList.remove("pulse-aggregator");
+        btnDirectAts.title = "Jump directly to official company career portal";
+      }
+      btnDirectAts.classList.remove("hidden");
+    } else {
+      btnDirectAts.classList.add("hidden");
+    }
+
+    companyIntelligenceBar.classList.remove("hidden");
+  } catch (err) {
+    console.debug("Company lookup skipped:", err);
   }
 }
 
@@ -282,6 +362,9 @@ function guessCompanyAndRole(title) {
     const parts = title.split(" - ");
     if (!inputTitle.value) inputTitle.value = parts[0].trim();
     if (!inputCompany.value) inputCompany.value = parts[1].trim();
+  }
+  if (inputCompany.value) {
+    lookupAndRenderCompany(inputCompany.value.trim(), inputTitle.value.trim(), currentActiveUrl);
   }
 }
 
@@ -630,6 +713,7 @@ async function handleMarkApplied() {
 
     btnMarkApplied.textContent = "✅ Applied Logged!";
     btnMarkApplied.disabled = true;
+    await lookupAndRenderCompany(company, title, currentActiveUrl);
     setTimeout(() => {
       btnMarkApplied.textContent = "✅ Applied in Radar DB";
     }, 2000);
@@ -714,7 +798,8 @@ async function handleDismissJob() {
       btnDismissEval.disabled = true;
     }
 
-    // Refresh bridge stats in footer
+    // Refresh company status & bridge stats
+    await lookupAndRenderCompany(company, title, currentActiveUrl);
     await checkBridgeHealth();
 
   } catch (err) {

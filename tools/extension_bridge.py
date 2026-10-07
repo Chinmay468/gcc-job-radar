@@ -146,6 +146,12 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
 
         if path in ("/", "/health", "/status"):
             self.handle_health()
+        elif path == "/lookup_company":
+            query_params = urllib.parse.parse_qs(url_parts.query)
+            company = query_params.get("company", [""])[0]
+            title = query_params.get("title", [""])[0]
+            url = query_params.get("url", [""])[0]
+            self.handle_lookup_company(company, title, url)
         elif path.startswith("/download/"):
             filename = urllib.parse.unquote(path[len("/download/"):].strip())
             self.handle_download(filename, as_attachment=True)
@@ -161,6 +167,13 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/evaluate":
             self.handle_evaluate()
+        elif path == "/lookup_company":
+            body = self._read_json_body()
+            self.handle_lookup_company(
+                body.get("company", ""),
+                body.get("title", ""),
+                body.get("url", ""),
+            )
         elif path == "/tailor":
             self.handle_tailor()
         elif path == "/refine":
@@ -618,6 +631,17 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             logger.error(f"Failed to dismiss job: {e}", exc_info=True)
             self._send_json(500, {"error": str(e)})
+
+    def handle_lookup_company(self, company: str, title: str = "", url: str = ""):
+        """Resolves company against Radar registry, canonical ATS portal, and DB history."""
+        try:
+            from tools.company_resolver import resolve_company
+            db_path = get_db_path()
+            res = resolve_company(company, title=title, current_url=url, db_path=db_path)
+            self._send_json(200, res)
+        except Exception as e:
+            logger.error(f"Company resolution error for '{company}': {e}", exc_info=True)
+            self._send_json(500, {"error": str(e), "found": False})
 
 
 class ThreadingBridgeServer(socketserver.ThreadingTCPServer):
