@@ -150,10 +150,16 @@
         <button id="btn-outreach" class="btn btn-secondary btn-outreach" title="Generate tailored recruiter InMail, LinkedIn note & cold outreach">
           <span class="btn-icon">✉️</span> <span>Outreach</span>
         </button>
+        <button id="btn-autofill" class="btn btn-secondary btn-autofill" title="1-Click ATS Application Autofill (Greenhouse, Lever, Ashby, Workday)">
+          <span class="btn-icon">⚡</span> <span>Autofill</span>
+        </button>
         <button id="btn-dismiss-main" class="btn btn-danger-outline btn-dismiss" title="Dismiss this job & company from radar">
           <span class="btn-icon">🗑️</span> <span>Dismiss</span>
         </button>
       </div>
+
+      <!-- Autofill Feedback Banner -->
+      <div id="autofill-banner" class="autofill-banner hidden"></div>
 
       <!-- Dismiss Notification Banner -->
       <div id="dismiss-banner" class="dismiss-banner hidden"></div>
@@ -290,6 +296,53 @@
             <button id="btn-copy-outreach" class="btn btn-primary btn-copy-outreach" type="button">
               <span id="copy-outreach-icon">📋</span> <span id="copy-outreach-text">Copy Note</span>
             </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ATS Screening Question Assistant (Phase 4) -->
+    <section id="screening-card" class="card screening-card hidden">
+      <div class="card-header">
+        <div class="screening-header-title">
+          <span class="card-title">
+            <span class="card-title-icon">🤖</span> Screening Answer Assistant
+          </span>
+          <span class="badge-v">AI / ATS</span>
+        </div>
+        <div class="card-header-actions">
+          <button id="btn-close-screening" class="btn-text btn-close-screening" title="Close">✕</button>
+        </div>
+      </div>
+
+      <div class="screening-controls">
+        <div class="quick-questions-label">Quick Screening Prompts:</div>
+        <div class="quick-chips-group">
+          <button class="chip-btn" data-q="Why do you want to work at this company?" type="button">🌟 Why Company?</button>
+          <button class="chip-btn" data-q="What is your current notice period and earliest joining date?" type="button">⏱ Notice Period</button>
+          <button class="chip-btn" data-q="Describe your hands-on experience with Java and Spring Boot." type="button">⚡ Java/Spring Stack</button>
+          <button class="chip-btn" data-q="Are you legally authorized to work, and do you require visa sponsorship?" type="button">📜 Work Auth / Visa</button>
+          <button class="chip-btn" data-q="Are you open and willing to relocate for this position?" type="button">📍 Relocation</button>
+          <button class="chip-btn" data-q="What are your compensation / salary expectations?" type="button">💰 Salary Expectations</button>
+        </div>
+
+        <div class="screening-input-wrap">
+          <input type="text" id="screening-question-input" placeholder="Paste any screening question from the application form..." />
+          <button id="btn-generate-answer" class="btn btn-primary btn-generate-answer" type="button">Answer</button>
+        </div>
+
+        <div id="screening-answer-box" class="screening-answer-box hidden">
+          <textarea id="screening-answer-textarea" rows="4"></textarea>
+          <div class="screening-actions-row">
+            <span id="screening-source-tag" class="screening-source-tag">AI Generated</span>
+            <div class="screening-btns-right">
+              <button id="btn-copy-screening" class="btn btn-secondary btn-sm" type="button">
+                <span id="copy-screening-icon">📋</span> <span id="copy-screening-text">Copy</span>
+              </button>
+              <button id="btn-insert-screening" class="btn btn-primary btn-sm" type="button" title="Insert answer directly into active form field on page">
+                <span>⚡ Insert into Page</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

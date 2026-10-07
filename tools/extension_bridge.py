@@ -158,6 +158,8 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         elif path.startswith("/view/"):
             filename = urllib.parse.unquote(path[len("/view/"):].strip())
             self.handle_download(filename, as_attachment=False)
+        elif path == "/candidate_profile":
+            self.handle_get_candidate_profile()
         else:
             self._send_json(404, {"error": "Not Found", "path": path})
 
@@ -184,6 +186,10 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.handle_dismiss()
         elif path == "/generate_outreach":
             self.handle_generate_outreach()
+        elif path == "/candidate_profile":
+            self.handle_save_candidate_profile()
+        elif path == "/answer_screening_question":
+            self.handle_answer_screening_question()
         else:
             self._send_json(404, {"error": "Not Found", "path": path})
 
@@ -667,6 +673,49 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             logger.error(f"Outreach generation error: {e}", exc_info=True)
             self._send_json(500, {"error": str(e), "success": False})
+
+    def handle_get_candidate_profile(self):
+        """Returns candidate profile data for 1-click ATS form filling."""
+        try:
+            from tools.autofill_engine import get_candidate_profile
+            profile = get_candidate_profile()
+            self._send_json(200, {"success": True, "profile": profile})
+        except Exception as e:
+            logger.error(f"Error fetching candidate profile: {e}", exc_info=True)
+            self._send_json(500, {"error": str(e), "success": False})
+
+    def handle_save_candidate_profile(self):
+        """Updates and persists custom candidate profile overrides."""
+        try:
+            from tools.autofill_engine import save_candidate_profile
+            body = self._read_json_body()
+            profile = save_candidate_profile(body)
+            self._send_json(200, {"success": True, "profile": profile})
+        except Exception as e:
+            logger.error(f"Error saving candidate profile: {e}", exc_info=True)
+            self._send_json(500, {"error": str(e), "success": False})
+
+    def handle_answer_screening_question(self):
+        """Generates crisp answer to ATS application screening questions."""
+        body = self._read_json_body()
+        question = body.get("question", "").strip()
+        company = body.get("company", "").strip() or "Company"
+        role = body.get("role", "") or body.get("title", "") or "Software Engineer"
+        jd_text = body.get("jd_text", "").strip()
+
+        try:
+            from tools.autofill_engine import answer_screening_question
+            res = answer_screening_question(
+                question=question,
+                company=company,
+                role=role,
+                jd_text=jd_text,
+            )
+            self._send_json(200, res)
+        except Exception as e:
+            logger.error(f"Error answering screening question: {e}", exc_info=True)
+            self._send_json(500, {"error": str(e), "success": False})
+
 
 
 class ThreadingBridgeServer(socketserver.ThreadingTCPServer):

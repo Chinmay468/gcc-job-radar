@@ -58,6 +58,25 @@ let currentOutreachData = null;
 let currentOutreachFormat = "linkedin";
 let currentAudience = "recruiter";
 
+// Autofill & Screening Assistant DOM Elements (Phase 4)
+const btnAutofill = document.getElementById("btn-autofill");
+const autofillBanner = document.getElementById("autofill-banner");
+const screeningCard = document.getElementById("screening-card");
+const btnCloseScreening = document.getElementById("btn-close-screening");
+const chipBtns = document.querySelectorAll(".chip-btn");
+const screeningQuestionInput = document.getElementById("screening-question-input");
+const btnGenerateAnswer = document.getElementById("btn-generate-answer");
+const screeningAnswerBox = document.getElementById("screening-answer-box");
+const screeningAnswerTextarea = document.getElementById("screening-answer-textarea");
+const screeningSourceTag = document.getElementById("screening-source-tag");
+const btnCopyScreening = document.getElementById("btn-copy-screening");
+const copyScreeningIcon = document.getElementById("copy-screening-icon");
+const copyScreeningText = document.getElementById("copy-screening-text");
+const btnInsertScreening = document.getElementById("btn-insert-screening");
+
+let candidateProfileCache = null;
+let lastFocusedFieldId = null;
+
 const loadingCard = document.getElementById("loading-card");
 const loadingText = document.getElementById("loading-text");
 
@@ -214,6 +233,55 @@ function setupEventListeners() {
     btnCopySubject.addEventListener("click", handleCopySubject);
   }
 
+  // Phase 4 Listeners
+  if (btnAutofill) {
+    btnAutofill.addEventListener("click", handleAutofillForm);
+  }
+
+  if (btnCloseScreening) {
+    btnCloseScreening.addEventListener("click", () => {
+      screeningCard.classList.add("hidden");
+    });
+  }
+
+  if (chipBtns && chipBtns.length > 0) {
+    chipBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const q = btn.getAttribute("data-q") || btn.textContent;
+        if (screeningQuestionInput) screeningQuestionInput.value = q;
+        handleAnswerScreeningQuestion(q);
+      });
+    });
+  }
+
+  if (btnGenerateAnswer) {
+    btnGenerateAnswer.addEventListener("click", () => {
+      const q = screeningQuestionInput ? screeningQuestionInput.value.trim() : "";
+      if (!q) {
+        alert("Please enter or select a screening question.");
+        return;
+      }
+      handleAnswerScreeningQuestion(q);
+    });
+  }
+
+  if (screeningQuestionInput) {
+    screeningQuestionInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (btnGenerateAnswer) btnGenerateAnswer.click();
+      }
+    });
+  }
+
+  if (btnCopyScreening) {
+    btnCopyScreening.addEventListener("click", handleCopyScreeningAnswer);
+  }
+
+  if (btnInsertScreening) {
+    btnInsertScreening.addEventListener("click", handleInsertScreeningAnswer);
+  }
+
   if (btnTabSwitchLoad) {
     btnTabSwitchLoad.addEventListener("click", async () => {
       if (tabSwitchBanner) tabSwitchBanner.classList.add("hidden");
@@ -225,6 +293,8 @@ function setupEventListeners() {
       if (companyIntelligenceBar) companyIntelligenceBar.classList.add("hidden");
       evalCard.classList.add("hidden");
       if (outreachCard) outreachCard.classList.add("hidden");
+      if (screeningCard) screeningCard.classList.add("hidden");
+      if (autofillBanner) autofillBanner.classList.add("hidden");
       tailorCard.classList.add("hidden");
       await loadJobFromActiveTab();
     });
@@ -1070,4 +1140,210 @@ async function handleCopySubject() {
     }, 1500);
   }
 }
+
+// 10. 1-Click ATS Form Autofill & Screening Answer Assistant (Phase 4)
+async function fetchCandidateProfile() {
+  if (candidateProfileCache) return candidateProfileCache;
+  try {
+    const res = await fetch(`${BRIDGE_URL}/candidate_profile`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.profile) {
+        candidateProfileCache = data.profile;
+        return candidateProfileCache;
+      }
+    }
+  } catch (e) {
+    console.debug("Bridge profile fetch failed, using fallback:", e);
+  }
+
+  // Built-in fallback profile
+  candidateProfileCache = {
+    first_name: "Chinmay",
+    last_name: "Maheshwari",
+    full_name: "Chinmay Maheshwari",
+    email: "chinmaymaheshwari.it27@gmail.com",
+    phone: "+91 9460449962",
+    linkedin: "https://www.linkedin.com/in/chinmay8064/",
+    github: "https://github.com/Chinmay468",
+    portfolio: "https://github.com/Chinmay468",
+    city: "Jaipur",
+    state: "Rajasthan",
+    country: "India",
+    location: "Jaipur, India",
+    university: "Jaipur Engineering College and Research Centre",
+    school: "Jaipur Engineering College and Research Centre",
+    degree: "B.Tech in Information Technology",
+    graduation_year: "2027",
+    gpa: "8.8",
+    notice_period: "Immediate",
+    authorized_in_country: "Yes",
+    visa_sponsorship_needed: "No",
+    willing_to_relocate: "Yes",
+    gender: "Male",
+  };
+  return candidateProfileCache;
+}
+
+async function handleAutofillForm() {
+  showLoading("Detecting form fields & autofilling application...");
+  if (autofillBanner) autofillBanner.classList.add("hidden");
+
+  try {
+    const profile = await fetchCandidateProfile();
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id) {
+      throw new Error("No active browser tab found.");
+    }
+
+    chrome.tabs.sendMessage(tab.id, { action: "autofill_form", profile: profile }, (response) => {
+      hideLoading();
+      if (chrome.runtime.lastError || !response || !response.success) {
+        const errMsg = chrome.runtime.lastError
+          ? chrome.runtime.lastError.message
+          : (response && response.error ? response.error : "Content script unreachable on this page.");
+        if (autofillBanner) {
+          autofillBanner.innerHTML = `<span>⚠️</span> <span>${errMsg} (Make sure you are on a supported job application page)</span>`;
+          autofillBanner.classList.remove("hidden");
+        }
+        return;
+      }
+
+      const count = response.filled_count || 0;
+      const fields = response.filled_fields || [];
+      const questions = response.open_questions || [];
+
+      if (autofillBanner) {
+        if (count > 0) {
+          autofillBanner.innerHTML = `<span>⚡</span> <span><strong>${count} fields filled!</strong> (${fields.join(", ")})</span>`;
+        } else {
+          autofillBanner.innerHTML = `<span>ℹ️</span> <span>No empty form fields matched. You may already have filled this form.</span>`;
+        }
+        autofillBanner.classList.remove("hidden");
+      }
+
+      // If open screening questions detected, open the screening assistant!
+      if (questions.length > 0 && screeningCard) {
+        screeningCard.classList.remove("hidden");
+        const firstQ = questions[0];
+        lastFocusedFieldId = firstQ.id;
+        if (screeningQuestionInput && !screeningQuestionInput.value) {
+          screeningQuestionInput.value = firstQ.context || "";
+        }
+      }
+    });
+  } catch (err) {
+    hideLoading();
+    alert(`Autofill failed: ${err.message}`);
+  }
+}
+
+async function handleAnswerScreeningQuestion(questionText) {
+  const q = questionText || (screeningQuestionInput ? screeningQuestionInput.value.trim() : "");
+  if (!q) return;
+
+  const company = inputCompany.value.trim() || "Target Company";
+  const role = inputTitle.value.trim() || "Software Engineer";
+  const jd_text = inputJd.value.trim();
+
+  if (btnGenerateAnswer) {
+    btnGenerateAnswer.disabled = true;
+    btnGenerateAnswer.textContent = "Generating...";
+  }
+
+  try {
+    const res = await fetch(`${BRIDGE_URL}/answer_screening_question`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: q,
+        company: company,
+        role: role,
+        jd_text: jd_text,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (screeningAnswerTextarea) {
+      screeningAnswerTextarea.value = data.answer || "";
+    }
+    if (screeningSourceTag) {
+      screeningSourceTag.textContent = data.source === "groq" ? "✨ AI Generated (Groq)" : "🎯 Radar Profile Match";
+    }
+    if (screeningAnswerBox) {
+      screeningAnswerBox.classList.remove("hidden");
+    }
+    if (screeningCard) {
+      screeningCard.classList.remove("hidden");
+      screeningCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  } catch (err) {
+    alert(`Failed to generate screening answer: ${err.message}\nEnsure the bridge daemon is running.`);
+  } finally {
+    if (btnGenerateAnswer) {
+      btnGenerateAnswer.disabled = false;
+      btnGenerateAnswer.textContent = "Answer";
+    }
+  }
+}
+
+async function handleCopyScreeningAnswer() {
+  if (!screeningAnswerTextarea) return;
+  const text = screeningAnswerTextarea.value;
+  if (!text) return;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    if (copyScreeningIcon) copyScreeningIcon.textContent = "✅";
+    if (copyScreeningText) copyScreeningText.textContent = "Copied!";
+    setTimeout(() => {
+      if (copyScreeningIcon) copyScreeningIcon.textContent = "📋";
+      if (copyScreeningText) copyScreeningText.textContent = "Copy";
+    }, 2000);
+  } catch (err) {
+    screeningAnswerTextarea.select();
+    document.execCommand("copy");
+    if (copyScreeningText) copyScreeningText.textContent = "Copied!";
+    setTimeout(() => {
+      if (copyScreeningText) copyScreeningText.textContent = "Copy";
+    }, 2000);
+  }
+}
+
+async function handleInsertScreeningAnswer() {
+  if (!screeningAnswerTextarea) return;
+  const text = screeningAnswerTextarea.value;
+  if (!text) {
+    alert("No answer text to insert.");
+    return;
+  }
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab || !tab.id) return;
+
+  chrome.tabs.sendMessage(tab.id, {
+    action: "fill_specific_field",
+    fieldId: lastFocusedFieldId,
+    value: text,
+  }, (response) => {
+    if (chrome.runtime.lastError || !response || !response.success) {
+      alert("Could not insert directly into form field. Copied to clipboard instead!");
+      handleCopyScreeningAnswer();
+    } else {
+      if (btnInsertScreening) {
+        const orig = btnInsertScreening.innerHTML;
+        btnInsertScreening.innerHTML = "<span>✅ Inserted!</span>";
+        setTimeout(() => {
+          btnInsertScreening.innerHTML = orig;
+        }, 2000);
+      }
+    }
+  });
+}
+
 

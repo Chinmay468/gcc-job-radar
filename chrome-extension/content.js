@@ -316,12 +316,375 @@ function extractJobDetails() {
   };
 }
 
+/**
+ * --------------------------------------------------------------------------
+ * 1-Click ATS Form Autofill Engine (Phase 4)
+ * Supports Greenhouse, Lever, Ashby, Workday, SmartRecruiters, and custom ATS.
+ * --------------------------------------------------------------------------
+ */
+
+function getElementContextText(el) {
+  const parts = [];
+  if (el.id) parts.push(el.id);
+  if (el.name) parts.push(el.name);
+  if (el.placeholder) parts.push(el.placeholder);
+  if (el.getAttribute("aria-label")) parts.push(el.getAttribute("aria-label"));
+  if (el.getAttribute("autocomplete")) parts.push(el.getAttribute("autocomplete"));
+  if (el.getAttribute("data-automation-id")) parts.push(el.getAttribute("data-automation-id"));
+  if (el.getAttribute("data-qa")) parts.push(el.getAttribute("data-qa"));
+
+  // Check explicit label
+  if (el.id) {
+    try {
+      const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+      if (label) parts.push(label.innerText);
+    } catch (e) {}
+  }
+
+  // Check parent label or form-group container
+  const parentContainer = el.closest("label, .form-group, .field, [class*='field'], [class*='question'], [class*='input-wrapper']");
+  if (parentContainer) {
+    const clone = parentContainer.cloneNode(true);
+    clone.querySelectorAll("input, select, textarea, button").forEach((c) => c.remove());
+    parts.push(clone.innerText);
+  }
+
+  // Preceding sibling or heading
+  const prev = el.previousElementSibling;
+  if (prev && (prev.tagName === "LABEL" || prev.tagName === "SPAN" || prev.tagName === "DIV")) {
+    parts.push(prev.innerText);
+  }
+
+  return parts.join(" ").toLowerCase().replace(/\s+/g, " ");
+}
+
+function highlightFilledElement(el) {
+  const origOutline = el.style.outline;
+  const origBg = el.style.backgroundColor;
+  el.style.outline = "2px solid #10b981";
+  el.style.backgroundColor = "rgba(16, 185, 129, 0.08)";
+  el.style.transition = "all 0.3s ease";
+  setTimeout(() => {
+    el.style.outline = origOutline;
+    el.style.backgroundColor = origBg;
+  }, 2500);
+}
+
+function setNativeInputValue(el, value) {
+  if (!el || value === undefined || value === null) return false;
+  try {
+    el.focus();
+    const tag = el.tagName.toLowerCase();
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      tag === "textarea" ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype,
+      "value"
+    )?.set;
+
+    if (nativeSetter) {
+      nativeSetter.call(el, value);
+    } else {
+      el.value = value;
+    }
+
+    el.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new Event("blur", { bubbles: true, cancelable: true }));
+
+    highlightFilledElement(el);
+    return true;
+  } catch (e) {
+    el.value = value;
+    highlightFilledElement(el);
+    return true;
+  }
+}
+
+function setNativeSelectValue(el, matchText) {
+  if (!el || !el.options || !matchText) return false;
+  const target = matchText.toLowerCase().trim();
+  for (let i = 0; i < el.options.length; i++) {
+    const opt = el.options[i];
+    const text = opt.text.toLowerCase().trim();
+    const val = (opt.value || "").toLowerCase().trim();
+    if (text === target || val === target || text.includes(target) || val.includes(target)) {
+      el.selectedIndex = i;
+      el.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+      highlightFilledElement(el);
+      return true;
+    }
+  }
+  return false;
+}
+
+function showInPageToast(message) {
+  const existing = document.getElementById("gcc-autofill-toast");
+  if (existing) existing.remove();
+
+  const toast = document.createElement("div");
+  toast.id = "gcc-autofill-toast";
+  toast.innerText = message;
+  Object.assign(toast.style, {
+    position: "fixed",
+    top: "20px",
+    right: "20px",
+    background: "linear-gradient(135deg, #064e3b, #047857)",
+    color: "#ffffff",
+    padding: "10px 18px",
+    borderRadius: "8px",
+    fontSize: "13px",
+    fontWeight: "600",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.4), 0 0 12px rgba(16,185,129,0.4)",
+    zIndex: "2147483647",
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    transition: "opacity 0.3s ease, transform 0.3s ease",
+    opacity: "0",
+    transform: "translateY(-10px)",
+  });
+
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+  });
+
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(-10px)";
+    setTimeout(() => toast.remove(), 400);
+  }, 3500);
+}
+
+function detectAndFillJobForm(customProfile) {
+  const profile = customProfile || {
+    first_name: "Chinmay",
+    last_name: "Maheshwari",
+    full_name: "Chinmay Maheshwari",
+    email: "chinmaymaheshwari.it27@gmail.com",
+    phone: "+91 9460449962",
+    linkedin: "https://www.linkedin.com/in/chinmay8064/",
+    github: "https://github.com/Chinmay468",
+    portfolio: "https://github.com/Chinmay468",
+    location: "Jaipur, India",
+    city: "Jaipur",
+    state: "Rajasthan",
+    country: "India",
+    school: "Jaipur Engineering College and Research Centre",
+    university: "Jaipur Engineering College and Research Centre",
+    degree: "B.Tech in Information Technology",
+    graduation_year: "2027",
+    gpa: "8.8",
+    notice_period: "Immediate",
+    authorized_in_country: "Yes",
+    visa_sponsorship_needed: "No",
+    willing_to_relocate: "Yes",
+    gender: "Male",
+  };
+
+  const filledFields = [];
+  const openQuestions = [];
+
+  const inputs = Array.from(document.querySelectorAll("input, textarea, select"));
+
+  inputs.forEach((el) => {
+    const type = (el.type || "").toLowerCase();
+    if (type === "hidden" || type === "submit" || type === "button" || type === "checkbox") return;
+
+    const ctx = getElementContextText(el);
+    const currentVal = (el.value || "").trim();
+
+    // 1. First Name
+    if (/(first.*name|fname|given.*name)/i.test(ctx) && !/(last|full|legal.*name)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.first_name)) filledFields.push("First Name");
+      return;
+    }
+
+    // 2. Last Name
+    if (/(last.*name|lname|surname|family.*name)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.last_name)) filledFields.push("Last Name");
+      return;
+    }
+
+    // 3. Full Name
+    if (/(full.*name|^name$|candidate.*name|legal.*name)/i.test(ctx) && !/(first|last|company|school|user|file)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.full_name)) filledFields.push("Full Name");
+      return;
+    }
+
+    // 4. Email
+    if (type === "email" || /(email|e-mail)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.email)) filledFields.push("Email");
+      return;
+    }
+
+    // 5. Phone
+    if (type === "tel" || /(phone|mobile|cell|contact.*number)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.phone)) filledFields.push("Phone");
+      return;
+    }
+
+    // 6. LinkedIn
+    if (/(linkedin|linked.*in)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.linkedin)) filledFields.push("LinkedIn");
+      return;
+    }
+
+    // 7. GitHub
+    if (/(github|git.*hub)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.github)) filledFields.push("GitHub");
+      return;
+    }
+
+    // 8. Portfolio / Website
+    if (/(portfolio|personal.*site|website|webpage|other.*url)/i.test(ctx) && !/(linkedin|github)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.portfolio || profile.github)) filledFields.push("Portfolio");
+      return;
+    }
+
+    // 9. Location / City
+    if (/(current.*location|city|address|residence)/i.test(ctx) && !/(relocat|work.*auth)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.city || profile.location)) filledFields.push("Location");
+      return;
+    }
+
+    // 10. University / School
+    if (/(university|college|school|institution|education)/i.test(ctx) && !/(degree|grad)/i.test(ctx)) {
+      if (el.tagName.toLowerCase() === "select") {
+        if (setNativeSelectValue(el, "Jaipur")) filledFields.push("University");
+      } else {
+        if (setNativeInputValue(el, profile.university || profile.school)) filledFields.push("University");
+      }
+      return;
+    }
+
+    // 11. Degree / Major
+    if (/(degree|field.*of.*study|discipline|major)/i.test(ctx)) {
+      if (el.tagName.toLowerCase() === "select") {
+        if (setNativeSelectValue(el, "Bachelor")) filledFields.push("Degree");
+      } else {
+        if (setNativeInputValue(el, profile.degree)) filledFields.push("Degree");
+      }
+      return;
+    }
+
+    // 12. Graduation Year
+    if (/(grad.*year|graduation.*year|completion.*year)/i.test(ctx)) {
+      if (el.tagName.toLowerCase() === "select") {
+        if (setNativeSelectValue(el, profile.graduation_year)) filledFields.push("Grad Year");
+      } else {
+        if (setNativeInputValue(el, profile.graduation_year)) filledFields.push("Grad Year");
+      }
+      return;
+    }
+
+    // 13. GPA / Percentage
+    if (/(gpa|cgpa|percentage)/i.test(ctx)) {
+      if (setNativeInputValue(el, profile.gpa)) filledFields.push("GPA");
+      return;
+    }
+
+    // 14. Notice Period
+    if (/(notice.*period|how.*soon|available.*to.*start|earliest.*start)/i.test(ctx)) {
+      if (el.tagName.toLowerCase() === "select") {
+        if (setNativeSelectValue(el, "Immediate")) filledFields.push("Notice Period");
+      } else {
+        if (setNativeInputValue(el, profile.notice_period)) filledFields.push("Notice Period");
+      }
+      return;
+    }
+
+    // 15. Work Authorization (Yes)
+    if (/(authorized.*to.*work|work.*authorization|legally.*authorized|eligible.*to.*work)/i.test(ctx)) {
+      if (el.tagName.toLowerCase() === "select") {
+        if (setNativeSelectValue(el, "Yes")) filledFields.push("Work Authorization");
+      } else if (type === "text") {
+        if (setNativeInputValue(el, "Yes")) filledFields.push("Work Authorization");
+      }
+      return;
+    }
+
+    // 16. Visa Sponsorship (No)
+    if (/(require.*sponsorship|visa.*sponsorship|sponsorship.*now.*or.*in.*the.*future)/i.test(ctx)) {
+      if (el.tagName.toLowerCase() === "select") {
+        if (setNativeSelectValue(el, "No")) filledFields.push("Visa Sponsorship");
+      } else if (type === "text") {
+        if (setNativeInputValue(el, "No")) filledFields.push("Visa Sponsorship");
+      }
+      return;
+    }
+
+    // 17. Relocation (Yes)
+    if (/(willing.*to.*relocate|open.*to.*relocat|relocation)/i.test(ctx)) {
+      if (el.tagName.toLowerCase() === "select") {
+        if (setNativeSelectValue(el, "Yes")) filledFields.push("Relocation");
+      } else if (type === "text") {
+        if (setNativeInputValue(el, "Yes")) filledFields.push("Relocation");
+      }
+      return;
+    }
+
+    // 18. Open screening questions (e.g. textarea or text input with questions)
+    if (el.tagName.toLowerCase() === "textarea" || (type === "text" && ctx.length > 25)) {
+      if (!currentVal && ctx.length > 15) {
+        openQuestions.push({
+          id: el.id || `field_${openQuestions.length}`,
+          context: ctx.slice(0, 100),
+          tag: el.tagName.toLowerCase(),
+        });
+      }
+    }
+  });
+
+  const uniqueFilled = Array.from(new Set(filledFields));
+  const count = uniqueFilled.length;
+
+  if (count > 0) {
+    showInPageToast(`✔ Radar Autofill: ${count} fields filled! (${uniqueFilled.slice(0, 3).join(", ")}${count > 3 ? "..." : ""})`);
+  } else {
+    showInPageToast(`ℹ Radar Autofill: Scanned page, no matching empty fields found.`);
+  }
+
+  return {
+    filled_count: count,
+    filled_fields: uniqueFilled,
+    open_questions: openQuestions,
+  };
+}
+
+function fillSpecificField(fieldId, value) {
+  let target = null;
+  if (fieldId) target = document.getElementById(fieldId);
+  if (!target) {
+    target = document.querySelector("textarea:focus, input:focus, textarea");
+  }
+  if (!target) return { filled: false, error: "No target input field found." };
+
+  const ok = setNativeInputValue(target, value);
+  if (ok) {
+    showInPageToast("✔ Answer inserted into form field!");
+  }
+  return { filled: ok };
+}
+
 // Listen for message from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "extract_job_data") {
     try {
       const data = extractJobDetails();
       sendResponse({ success: true, data: data });
+    } catch (err) {
+      sendResponse({ success: false, error: err.message });
+    }
+  } else if (request.action === "autofill_form") {
+    try {
+      const res = detectAndFillJobForm(request.profile);
+      sendResponse({ success: true, ...res });
+    } catch (err) {
+      sendResponse({ success: false, error: err.message });
+    }
+  } else if (request.action === "fill_specific_field") {
+    try {
+      const res = fillSpecificField(request.fieldId, request.value);
+      sendResponse({ success: true, ...res });
     } catch (err) {
       sendResponse({ success: false, error: err.message });
     }
@@ -411,6 +774,25 @@ async function initFloatingRadarBadge() {
           .radar-direct-btn:hover {
             opacity: 0.9;
           }
+          .radar-autofill-btn {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: #ffffff;
+            border: none;
+            border-radius: 9999px;
+            padding: 2.5px 8px;
+            font-size: 10.5px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-left: 2px;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            transition: opacity 0.15s ease, transform 0.15s ease;
+          }
+          .radar-autofill-btn:hover {
+            opacity: 0.9;
+            transform: scale(1.04);
+          }
           .close-btn {
             background: none;
             border: none;
@@ -427,13 +809,22 @@ async function initFloatingRadarBadge() {
         <div class="radar-pill" title="Click to open GCC Job Radar Side Panel">
           <span class="radar-icon">🎯</span>
           <span class="radar-text">${data.badge_label}</span>
+          ${document.querySelectorAll("input:not([type='hidden']), textarea").length >= 2 ? `<button class="radar-autofill-btn" title="1-Click ATS Form Autofill">⚡ Autofill</button>` : ""}
           ${data.direct_ats_url ? `<a class="radar-direct-btn" href="${data.direct_ats_url}" target="_blank" rel="noopener noreferrer">Direct ATS ↗</a>` : ""}
           <button class="close-btn" title="Dismiss badge">×</button>
         </div>
       `;
 
+      const autofillBtn = shadow.querySelector(".radar-autofill-btn");
+      if (autofillBtn) {
+        autofillBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          detectAndFillJobForm();
+        });
+      }
+
       shadow.querySelector(".radar-pill").addEventListener("click", (e) => {
-        if (e.target.closest(".radar-direct-btn") || e.target.closest(".close-btn")) return;
+        if (e.target.closest(".radar-direct-btn") || e.target.closest(".radar-autofill-btn") || e.target.closest(".close-btn")) return;
         chrome.runtime.sendMessage({ action: "open_side_panel" });
       });
 
