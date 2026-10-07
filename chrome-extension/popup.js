@@ -112,8 +112,11 @@ function setupEventListeners() {
   if (btnOpenFullTab) {
     btnOpenFullTab.addEventListener("click", (e) => {
       e.preventDefault();
-      if (currentViewUrl) {
-        openUrlInTab(currentViewUrl);
+      const targetUrl = currentViewUrl || (currentFilename ? `${BRIDGE_URL}/view/${encodeURIComponent(currentFilename)}` : "");
+      if (targetUrl) {
+        openUrlInTab(targetUrl);
+      } else {
+        alert("Please click 'Tailor Resume' first to compile and view your resume.");
       }
     });
   }
@@ -141,7 +144,7 @@ function setupEventListeners() {
 
 function openUrlInTab(url) {
   if (chrome.tabs && chrome.tabs.create) {
-    chrome.tabs.create({ url: url });
+    chrome.tabs.create({ url: url, active: true });
   } else {
     window.open(url, "_blank");
   }

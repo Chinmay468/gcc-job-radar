@@ -120,6 +120,26 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return {}
 
+    def do_HEAD(self):
+        url_parts = urllib.parse.urlparse(self.path)
+        path = url_parts.path
+
+        if path in ("/", "/health", "/status"):
+            self.send_response(200)
+            self._set_cors_headers("application/json")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        elif path.startswith("/download/"):
+            filename = urllib.parse.unquote(path[len("/download/"):].strip())
+            self.handle_download(filename, as_attachment=True, head_only=True)
+        elif path.startswith("/view/"):
+            filename = urllib.parse.unquote(path[len("/view/"):].strip())
+            self.handle_download(filename, as_attachment=False, head_only=True)
+        else:
+            self.send_response(404)
+            self._set_cors_headers("application/json")
+            self.end_headers()
+
     def do_GET(self):
         url_parts = urllib.parse.urlparse(self.path)
         path = url_parts.path
@@ -423,8 +443,8 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             "message": "Resume refined and recompiled successfully!",
         })
 
-    def handle_download(self, filename: str, as_attachment: bool = True):
-        """Serves compiled PDF directly to browser (inline preview or attachment download)."""
+    def handle_download(self, filename: str, as_attachment: bool = True, head_only: bool = False):
+        """Serves compiled PDF directly to browser with full Range header support for Chrome PDF Viewer."""
         # Prevent directory traversal
         safe_name = os.path.basename(filename)
         file_path = OUTPUT_DIR / safe_name
@@ -434,19 +454,65 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
                 file_path = fallback_path
 
         if not file_path.exists() or not file_path.is_file():
-            self._send_json(404, {"error": "File not found", "filename": safe_name})
+            if head_only:
+                self.send_response(404)
+                self._set_cors_headers("application/json")
+                self.end_headers()
+            else:
+                self._send_json(404, {"error": "File not found", "filename": safe_name})
             return
 
         with open(file_path, "rb") as f:
             pdf_bytes = f.read()
 
+        total_size = len(pdf_bytes)
         disp_type = "attachment" if as_attachment else "inline"
+
+        # Check for HTTP Range header (crucial for Chrome's native PDF Viewer)
+        range_header = self.headers.get("Range") if hasattr(self, "headers") else None
+        if range_header and range_header.startswith("bytes="):
+            try:
+                ranges = range_header[6:].split("-")
+                start = int(ranges[0]) if ranges[0] else 0
+                end = int(ranges[1]) if len(ranges) > 1 and ranges[1] else total_size - 1
+                if start >= total_size:
+                    start = total_size - 1
+                if end >= total_size:
+                    end = total_size - 1
+                if start > end:
+                    start = 0
+                chunk = pdf_bytes[start : end + 1]
+
+                self.send_response(206)
+                self._set_cors_headers("application/pdf")
+                self.send_header("Content-Disposition", f'{disp_type}; filename="{safe_name}"')
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Content-Range", f"bytes {start}-{end}/{total_size}")
+                self.send_header("Content-Length", str(len(chunk)))
+                self.send_header("Connection", "keep-alive")
+                self.end_headers()
+                if not head_only:
+                    try:
+                        self.wfile.write(chunk)
+                    except (ConnectionResetError, BrokenPipeError):
+                        pass
+                return
+            except Exception as e:
+                logger.warning(f"Error handling Range request: {e}")
+
+        # Standard 200 OK
         self.send_response(200)
         self._set_cors_headers("application/pdf")
         self.send_header("Content-Disposition", f'{disp_type}; filename="{safe_name}"')
-        self.send_header("Content-Length", str(len(pdf_bytes)))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(total_size))
+        self.send_header("Connection", "keep-alive")
         self.end_headers()
-        self.wfile.write(pdf_bytes)
+        if not head_only:
+            try:
+                self.wfile.write(pdf_bytes)
+            except (ConnectionResetError, BrokenPipeError):
+                pass
 
     def handle_record_job(self):
         """Records the job into gcc_jobs.db."""
@@ -554,8 +620,9 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(500, {"error": str(e)})
 
 
-class ReusableTCPServer(socketserver.TCPServer):
+class ThreadingBridgeServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
+    daemon_threads = True
 
 
 def run_bridge(port: int = PORT):
@@ -566,7 +633,7 @@ def run_bridge(port: int = PORT):
     print("   - Tectonic engine:  tools/bin/tectonic.exe")
     print("=" * 70)
 
-    with ReusableTCPServer(("127.0.0.1", port), BridgeHTTPRequestHandler) as httpd:
+    with ThreadingBridgeServer(("127.0.0.1", port), BridgeHTTPRequestHandler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
