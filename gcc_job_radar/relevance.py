@@ -73,6 +73,19 @@ def _has_strict_cs_requirement(description: str) -> bool:
     return bool(DEGREE_RISK_PATTERN.search(description))
 
 
+# Relocation & Visa Sponsorship Requirement Flag (informational, non-penalizing)
+RELOCATION_RISK_PATTERN = re.compile(
+    r"(?i)(willing to relocate|relocation (is )?required|must relocate|"
+    r"visa sponsorship|work visa|right to work in|in-office \d+ days? per week|"
+    r"hybrid.{0,20}\d+ days? per week)",
+)
+
+
+def _has_relocation_requirement(description: str) -> bool:
+    """True if the posting requires relocation or has a hard in-office attendance requirement."""
+    return bool(RELOCATION_RISK_PATTERN.search(description))
+
+
 def evaluate_job_relevance(
     title: str,
     description: str = "",
@@ -249,6 +262,10 @@ def evaluate_job_relevance(
 
     if degree_risk:
         why += " • ⚠️ Lists CS-only degree req (may be screened)"
+
+    relocation_req = _has_relocation_requirement(combined_text)
+    if relocation_req:
+        why += " • 📍 Requires relocation/visa sponsorship — confirm before applying"
 
     return final_score, matched_stack_ordered, why
 

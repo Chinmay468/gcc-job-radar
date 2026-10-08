@@ -1095,16 +1095,22 @@ async def execute_tool(
         )
 
         try:
-            tex_path, pdf_path = await asyncio.to_thread(tailor_resume_for_job, job_obj, force=True)
+            tailor_res = await asyncio.to_thread(tailor_resume_for_job, job_obj, force=True)
+            tex_path, pdf_path = tailor_res[0], tailor_res[1]
+            gap_note = getattr(tailor_res, "gap_note", None)
         except Exception as exc:
             logger.error("Error in tailor_job_resume tool: %s", exc)
-            tex_path, pdf_path = None, None
+            tex_path, pdf_path, gap_note = None, None, None
 
         if not tex_path and not pdf_path:
             return {
                 "status": "error",
                 "message": f"Could not tailor resume for {job_obj.company}. Ensure GROQ_API_KEY is configured in .env.",
             }
+
+        msg = f"Successfully tailored resume for {job_obj.company} - {job_obj.title}. LaTeX: {tex_path}, PDF: {pdf_path}."
+        if gap_note:
+            msg += f" {gap_note}"
 
         return {
             "status": "success",
@@ -1113,7 +1119,8 @@ async def execute_tool(
             "location": job_obj.location,
             "tex_path": tex_path,
             "pdf_path": pdf_path,
-            "message": f"Successfully tailored resume for {job_obj.company} - {job_obj.title}. LaTeX: {tex_path}, PDF: {pdf_path}.",
+            "gap_note": gap_note,
+            "message": msg,
         }
 
     if name == "search_internet_jobs":
@@ -1264,13 +1271,16 @@ def format_tool_result_summary(name: str, result: dict[str, Any]) -> str:
             title = html.escape(str(result.get("title", "Role")))
             tex_path = html.escape(str(result.get("tex_path") or ""))
             pdf_path = result.get("pdf_path")
+            gap_note = result.get("gap_note")
+            gap_str = f"\n💡 <i>{html.escape(str(gap_note))}</i>" if gap_note else ""
             pdf_str = f"\n📄 <b>PDF:</b> <code>{html.escape(str(pdf_path))}</code>" if pdf_path else ""
             return (
                 f"✅ <b>Tailored Resume Ready!</b>\n\n"
                 f"• <b>Company:</b> {comp}\n"
                 f"• <b>Role:</b> {title}\n"
                 f"• <b>LaTeX Source:</b> <code>{tex_path}</code>"
-                f"{pdf_str}\n\n"
+                f"{pdf_str}"
+                f"{gap_str}\n\n"
                 f"<i>Your resume has been tailored and saved to the <code>tailored/</code> workspace directory.</i>"
             )
         return f"⚠️ {html.escape(str(result.get('message', 'Could not tailor resume.')))}"

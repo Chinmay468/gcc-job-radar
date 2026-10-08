@@ -161,3 +161,64 @@ def test_resume_tailor_sanitize_latex():
     assert " -- distributed --- " in sanitized
     assert "`secure'" in sanitized
     assert "``cloud''" in sanitized
+
+
+def test_detect_candidate_stack_gaps_and_format_note():
+    """Verify JD-named stack items absent from candidate's profile are surfaced in note."""
+    from gcc_job_radar.resume_tailor_bridge import (
+        detect_candidate_stack_gaps,
+        format_stack_gap_note,
+        TailorResult,
+    )
+
+    mock_master = """
+    Languages: Java (Core), SQL
+    Backend: Spring Boot 3, RESTful APIs, Node.js
+    Databases: MySQL, MongoDB
+    Tools: Docker, Git, GitHub Actions
+    """
+
+    # Revolut-style JD with GCP, Kubernetes, and PostgreSQL (plus Java and Spring Boot from candidate profile)
+    revolut_jd = (
+        "Join Revolut Graduate Programme. Looking for engineers with strong Java and Spring Boot. "
+        "Experience with GCP, Kubernetes, and PostgreSQL is required."
+    )
+
+    gaps = detect_candidate_stack_gaps(revolut_jd, master_resume_text=mock_master)
+    assert "Kubernetes" in gaps
+    assert "GCP" in gaps
+    assert "PostgreSQL" in gaps
+    # Java and Spring Boot should NOT be flagged as gaps
+    assert "Java" not in gaps
+    assert "Spring Boot" not in gaps
+
+    note = format_stack_gap_note(gaps)
+    assert note is not None
+    assert "Note: this JD specifically asks for" in note
+    assert "GCP" in note
+    assert "Kubernetes" in note
+    assert "PostgreSQL" in note
+    assert "which aren't reflected in your current profile — worth knowing before applying." in note
+
+    # JD with matching stack only -> no gaps
+    matching_jd = "Java, Spring Boot, Docker, MySQL, and REST APIs."
+    no_gaps = detect_candidate_stack_gaps(matching_jd, master_resume_text=mock_master)
+    assert no_gaps == []
+    assert format_stack_gap_note(no_gaps) is None
+
+
+def test_tailor_result_backward_compatibility():
+    """Confirm TailorResult behaves as 2-tuple for backwards compatibility and carries gap_note."""
+    from gcc_job_radar.resume_tailor_bridge import TailorResult
+
+    res = TailorResult("tailored.tex", "tailored.pdf", gap_note="Note: JD asks for GCP.")
+    # 1. 2-tuple unpacking
+    tex, pdf = res
+    assert tex == "tailored.tex"
+    assert pdf == "tailored.pdf"
+    assert len(res) == 2
+
+    # 2. Named attributes
+    assert res.tex_path == "tailored.tex"
+    assert res.pdf_path == "tailored.pdf"
+    assert res.gap_note == "Note: JD asks for GCP."

@@ -378,3 +378,38 @@ def test_degree_requirement_risk_tier_boundary_transition() -> None:
     assert any(job_strict in t.jobs for t in pres_strict.tiers if t.label == "⚡ Strong Fit")
     assert not any(job_strict in t.jobs for t in pres_strict.tiers if t.label == "⭐ Best Fit")
 
+
+def test_relocation_requirement_flag_revolut_posting() -> None:
+    """Verify relocation and in-office requirements trigger 📍 flag without scoring penalty."""
+    base_title = "Graduate Software Engineer (Java)"
+    base_desc = "Join our backend engineering team building scalable services with Java and Spring Boot."
+
+    score_base, _, why_base = evaluate_job_relevance(title=base_title, description=base_desc)
+    assert "📍 Requires relocation" not in why_base
+
+    # Revolut-style posting with relocation, in-office days, and visa sponsorship
+    revolut_desc = (
+        f"{base_desc}\n"
+        "Requirements:\n"
+        "- Willing to relocate to one of our tech hubs in Europe\n"
+        "- In-office 3 days per week\n"
+        "- Visa sponsorship and relocation support provided\n"
+    )
+
+    score_relo, _, why_relo = evaluate_job_relevance(title=base_title, description=revolut_desc)
+
+    # 1. Non-penalizing: score must remain identical to base
+    assert score_relo == score_base
+
+    # 2. Informational flag must be present in why
+    assert "• 📍 Requires relocation/visa sponsorship — confirm before applying" in why_relo
+
+    # 3. Both degree risk and relocation flags can co-exist with distinct emojis
+    combined_desc = f"{revolut_desc}\nPursuing a degree in Computer Science."
+    score_both, _, why_both = evaluate_job_relevance(title=base_title, description=combined_desc)
+
+    # Degree risk applies -10 penalty, relocation applies 0
+    assert score_both == score_base - 10
+    assert "⚠️ Lists CS-only degree req (may be screened)" in why_both
+    assert "📍 Requires relocation/visa sponsorship — confirm before applying" in why_both
+

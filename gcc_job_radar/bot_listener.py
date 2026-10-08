@@ -865,10 +865,12 @@ async def handle_command(
 
         job_obj = _dict_to_job_posting(target_job)
         try:
-            tex_path, pdf_path = await asyncio.to_thread(tailor_resume_for_job, job_obj, force=True)
+            tailor_res = await asyncio.to_thread(tailor_resume_for_job, job_obj, force=True)
+            tex_path, pdf_path = tailor_res[0], tailor_res[1]
+            gap_note = getattr(tailor_res, "gap_note", None)
         except Exception as exc:
             logger.error("Error during on-demand resume tailoring for %s: %s", comp_name, exc)
-            tex_path, pdf_path = None, None
+            tex_path, pdf_path, gap_note = None, None, None
 
         if not tex_path and not pdf_path:
             await send_telegram_reply(
@@ -884,11 +886,13 @@ async def handle_command(
         if pdf_path and Path(pdf_path).is_file():
             effective_url, _, _ = resolve_effective_apply_url(target_job)
             apply_link = f'\n🔗 <a href="{html.escape(str(effective_url))}">Direct Apply Link</a>' if effective_url else ""
+            gap_caption = f"\n💡 {html.escape(str(gap_note))}" if gap_note else ""
             caption = (
                 f"📄 <b>Tailored Resume — {comp_name}</b>\n"
                 f"💼 {role_title}\n"
                 f"📍 {html.escape(str(target_job.get('location', 'India')))}"
                 f"{apply_link}"
+                f"{gap_caption}"
             )
             pdf_sent = await send_telegram_document(
                 bot_token, chat_id, pdf_path, caption=caption, client=client
@@ -896,12 +900,14 @@ async def handle_command(
 
         if not pdf_sent:
             pdf_str = f"\n📄 <b>PDF:</b> <code>{html.escape(str(pdf_path))}</code>" if pdf_path else ""
+            gap_str = f"\n💡 <i>{html.escape(str(gap_note))}</i>\n" if gap_note else ""
             reply = (
                 f"✅ <b>Tailored Resume Generated!</b>\n\n"
                 f"• <b>Company:</b> {comp_name}\n"
                 f"• <b>Role:</b> {role_title}\n"
                 f"• <b>LaTeX Source:</b> <code>{html.escape(str(tex_path))}</code>"
-                f"{pdf_str}\n\n"
+                f"{pdf_str}"
+                f"{gap_str}\n\n"
                 f"<i>Files saved in your <code>tailored/</code> workspace folder.</i>"
             )
             await send_telegram_reply(bot_token, chat_id, reply, client)
@@ -1298,26 +1304,31 @@ async def handle_callback_query(
         job_obj = _dict_to_job_posting(target_job)
 
         try:
-            tex_path, pdf_path = await asyncio.to_thread(tailor_resume_for_job, job_obj, force=True)
+            tailor_res = await asyncio.to_thread(tailor_resume_for_job, job_obj, force=True)
+            tex_path, pdf_path = tailor_res[0], tailor_res[1]
+            gap_note = getattr(tailor_res, "gap_note", None)
         except Exception as exc:
             logger.error("Callback query tailor error: %s", exc)
-            tex_path, pdf_path = None, None
+            tex_path, pdf_path, gap_note = None, None, None
 
         if pdf_path and Path(pdf_path).is_file():
             effective_url, _, _ = resolve_effective_apply_url(target_job)
             apply_link = f'\n🔗 <a href="{html.escape(str(effective_url))}">Direct Apply Link</a>' if effective_url else ""
+            gap_caption = f"\n💡 {html.escape(str(gap_note))}" if gap_note else ""
             caption = (
                 f"📄 <b>Tailored Resume — {comp_name}</b>\n"
                 f"💼 {role_title}\n"
                 f"📍 {html.escape(str(target_job.get('location', 'India')))}"
                 f"{apply_link}"
+                f"{gap_caption}"
             )
             await send_telegram_document(bot_token, chat_id, pdf_path, caption=caption, client=client)
         elif tex_path:
+            gap_str = f"\n💡 <i>{html.escape(str(gap_note))}</i>" if gap_note else ""
             await send_telegram_reply(
                 bot_token,
                 chat_id,
-                f"✅ <b>Tailored Resume LaTeX Ready for {comp_name}:</b>\n<code>{html.escape(str(tex_path))}</code>",
+                f"✅ <b>Tailored Resume LaTeX Ready for {comp_name}:</b>\n<code>{html.escape(str(tex_path))}</code>{gap_str}",
                 client,
             )
         else:
