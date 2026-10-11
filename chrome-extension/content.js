@@ -416,6 +416,193 @@ function setNativeSelectValue(el, matchText) {
   return false;
 }
 
+function setNativeCheckboxValue(el, targetChecked) {
+  if (!el) return false;
+  try {
+    el.focus();
+    const shouldCheck = Boolean(targetChecked);
+    if (el.checked !== shouldCheck) {
+      try {
+        el.click();
+      } catch (e) {}
+      if (el.checked !== shouldCheck) {
+        el.checked = shouldCheck;
+      }
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+    el.dispatchEvent(new Event("blur", { bubbles: true, cancelable: true }));
+    highlightFilledElement(el);
+    return true;
+  } catch (e) {
+    el.checked = Boolean(targetChecked);
+    highlightFilledElement(el);
+    return true;
+  }
+}
+
+function parseYearMonth(dateStr) {
+  if (!dateStr) return null;
+  const match = String(dateStr).trim().match(/^(\d{4})[-/.](\d{1,2})/);
+  if (!match) return null;
+  const year = match[1];
+  const monthNum = parseInt(match[2], 10);
+  if (isNaN(monthNum) || monthNum < 1 || monthNum > 12) return null;
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const monthName = monthNames[monthNum - 1];
+  const monthShort = monthName.slice(0, 3);
+  const monthPad = String(monthNum).padStart(2, "0");
+  return {
+    year,
+    monthNum,
+    monthPad,
+    monthName,
+    monthShort,
+  };
+}
+
+function fillEmploymentDate(el, dateStr, ctx) {
+  if (!el || !dateStr) return false;
+  const parsed = parseYearMonth(dateStr);
+  if (!parsed) return false;
+
+  const tag = el.tagName.toLowerCase();
+  const context = (ctx || "").toLowerCase();
+
+  // Handle <select> elements (e.g. Workday, Greenhouse month/year pickers)
+  if (tag === "select") {
+    // 1. Explicit month context
+    if (/(month)/i.test(context) && !/(year)/i.test(context)) {
+      return (
+        setNativeSelectValue(el, parsed.monthName) ||
+        setNativeSelectValue(el, parsed.monthPad) ||
+        setNativeSelectValue(el, String(parsed.monthNum)) ||
+        setNativeSelectValue(el, parsed.monthShort)
+      );
+    }
+    // 2. Explicit year context
+    if (/(year)/i.test(context) && !/(month)/i.test(context)) {
+      return setNativeSelectValue(el, parsed.year);
+    }
+    // 3. Infer from select options
+    const optTexts = Array.from(el.options).map((o) => (o.text || "").toLowerCase());
+    const optVals = Array.from(el.options).map((o) => (o.value || "").toLowerCase());
+    const isMonthSelect =
+      optTexts.some((t) => t.includes("january") || t.includes("may") || t.includes("jan")) ||
+      optVals.some((v) => v === "01" || v === "1" || v === "may");
+    if (isMonthSelect) {
+      return (
+        setNativeSelectValue(el, parsed.monthName) ||
+        setNativeSelectValue(el, parsed.monthPad) ||
+        setNativeSelectValue(el, String(parsed.monthNum)) ||
+        setNativeSelectValue(el, parsed.monthShort)
+      );
+    }
+    const isYearSelect =
+      optTexts.some((t) => /20\d\d/.test(t)) ||
+      optVals.some((v) => /20\d\d/.test(v));
+    if (isYearSelect) {
+      return setNativeSelectValue(el, parsed.year);
+    }
+    // Fallback: try month name, then year, then month number
+    return (
+      setNativeSelectValue(el, parsed.monthName) ||
+      setNativeSelectValue(el, parsed.year) ||
+      setNativeSelectValue(el, parsed.monthPad)
+    );
+  }
+
+  // Handle standard <input> types
+  const type = (el.type || "").toLowerCase();
+  if (type === "month") {
+    return setNativeInputValue(el, `${parsed.year}-${parsed.monthPad}`);
+  }
+  if (type === "date") {
+    return setNativeInputValue(el, `${parsed.year}-${parsed.monthPad}-01`);
+  }
+
+  // Handle text inputs
+  const placeholder = (el.placeholder || "").toLowerCase();
+  if (/(month)/i.test(context) && !/(year)/i.test(context)) {
+    return setNativeInputValue(
+      el,
+      /(mmm|name)/i.test(placeholder + " " + context) ? parsed.monthName : parsed.monthPad
+    );
+  }
+  if (/(year)/i.test(context) && !/(month)/i.test(context)) {
+    return setNativeInputValue(el, parsed.year);
+  }
+
+  // Combined date input
+  if (/(yyyy[-/]mm)/i.test(placeholder + " " + context)) {
+    return setNativeInputValue(el, `${parsed.year}-${parsed.monthPad}`);
+  }
+  if (/(mmm.*yyyy|month.*year)/i.test(placeholder + " " + context)) {
+    return setNativeInputValue(el, `${parsed.monthName} ${parsed.year}`);
+  }
+
+  // Default MM/YYYY format (e.g. "05/2026")
+  return setNativeInputValue(el, `${parsed.monthPad}/${parsed.year}`);
+}
+
+function isWorkExperienceContext(el) {
+  const ctx = getElementContextText(el);
+
+  // Hard exclusions: Education, availability, notice period, personal info
+  if (/(school|university|degree|graduat|college|education|academic|study|major)/i.test(ctx)) {
+    return false;
+  }
+  if (/(notice|available|availability|birth|dob|military|license|certif)/i.test(ctx)) {
+    return false;
+  }
+
+  // Direct positive context on element itself
+  if (/(work|employ|job|position|company|experience|internship|role)/i.test(ctx)) {
+    return true;
+  }
+
+  // Search enclosing section, fieldset, or form (avoiding single-field wrappers like .form-group)
+  const container =
+    el.closest(
+      "fieldset, [class*='experience'], [class*='work'], [class*='employment'], [class*='job'], " +
+      "[data-automation-id*='experience'], [data-automation-id*='work'], [id*='experience'], [id*='work'], " +
+      "[class*='form-section'], [class*='section'], [class*='card'], [class*='panel'], [class*='repeater'], " +
+      "[class*='container'], form"
+    ) || el.parentElement?.parentElement?.parentElement;
+
+  if (container) {
+    const containerText = (container.innerText || "").toLowerCase();
+    if (
+      /(education|academic|degrees|schools)/i.test(containerText) &&
+      !/(work|employ|job|position|experience|internship)/i.test(containerText)
+    ) {
+      return false;
+    }
+    if (
+      /(work.*experience|employment|employer|job.*history|past.*experience|work.*history|my.*experience)/i.test(
+        containerText
+      )
+    ) {
+      return true;
+    }
+    // Check if nearby sibling fields represent job title or company
+    const hasJobFields = Array.from(container.querySelectorAll("input, select, textarea")).some((sibling) => {
+      if (sibling === el) return false;
+      const sibCtx = getElementContextText(sibling);
+      return (
+        /(job.*title|position.*title|role.*title|^title$|company|employer|organization.*name)/i.test(sibCtx) &&
+        !/(school|university|degree|education|study)/i.test(sibCtx)
+      );
+    });
+    if (hasJobFields) return true;
+  }
+
+  return false;
+}
+
 function showInPageToast(message) {
   const existing = document.getElementById("gcc-autofill-toast");
   if (existing) existing.remove();
@@ -455,7 +642,17 @@ function showInPageToast(message) {
 }
 
 function detectAndFillJobForm(customProfile) {
-  const profile = customProfile || {
+  const defaultWorkHistory = [
+    {
+      job_title: "Full Stack Developer Intern",
+      company: "Yinolite Solution",
+      from: "2026-05",
+      to: "2026-06",
+      is_current: false,
+    },
+  ];
+
+  const profile = {
     first_name: "Chinmay",
     last_name: "Maheshwari",
     full_name: "Chinmay Maheshwari",
@@ -478,19 +675,73 @@ function detectAndFillJobForm(customProfile) {
     visa_sponsorship_needed: "No",
     willing_to_relocate: "Yes",
     gender: "Male",
+    work_history: defaultWorkHistory,
+    ...(customProfile || {}),
   };
+
+  const workHistory =
+    profile.work_history && Array.isArray(profile.work_history) && profile.work_history.length > 0
+      ? profile.work_history
+      : defaultWorkHistory;
 
   const filledFields = [];
   const openQuestions = [];
+
+  // Track work-history entry indices per container / field group
+  const assignedClusterMap = new Map();
+  let currentClusterIndex = 0;
+  const currentClusterSeenFields = new Set();
+
+  function getWorkHistoryEntry(el, fieldType) {
+    // 1. Try to find a distinct entry-level container (e.g. fieldset or repeating experience item)
+    const itemContainer = el.closest(
+      "[data-automation-id*='experience-item'], [class*='experience-item'], [class*='experienceItem'], " +
+      "[class*='work-item'], [class*='employment-item'], [class*='repeater-item'], [class*='item-row'], " +
+      "[class*='entry-row'], [class*='entry'], [data-automation-id*='workHistory-item'], fieldset"
+    );
+    if (itemContainer) {
+      if (!assignedClusterMap.has(itemContainer)) {
+        assignedClusterMap.set(itemContainer, currentClusterIndex++);
+      }
+      const idx = assignedClusterMap.get(itemContainer);
+      return { entry: workHistory[idx], index: idx };
+    }
+
+    // 2. Sequential fallback if no explicit item-level container:
+    // If the same field type is encountered again in this cluster, advance to next role!
+    if (currentClusterSeenFields.has(fieldType)) {
+      currentClusterIndex++;
+      currentClusterSeenFields.clear();
+    }
+    currentClusterSeenFields.add(fieldType);
+    const idx = currentClusterIndex;
+    return { entry: workHistory[idx], index: idx };
+  }
 
   const inputs = Array.from(document.querySelectorAll("input, textarea, select"));
 
   inputs.forEach((el) => {
     const type = (el.type || "").toLowerCase();
-    if (type === "hidden" || type === "submit" || type === "button" || type === "checkbox") return;
+    if (type === "hidden" || type === "submit" || type === "button") return;
 
     const ctx = getElementContextText(el);
     const currentVal = (el.value || "").trim();
+
+    // Checkbox handling: specifically handle "I currently work here", skip all other checkboxes
+    if (type === "checkbox") {
+      if (
+        /(currently.*work.*here|current.*employer|i.*currently.*work|currently.*employed|current.*job)/i.test(ctx) ||
+        (/(^current$|present)/i.test(ctx) && isWorkExperienceContext(el))
+      ) {
+        const { entry } = getWorkHistoryEntry(el, "is_current");
+        if (entry) {
+          if (setNativeCheckboxValue(el, entry.is_current)) {
+            filledFields.push("Current Employer");
+          }
+        }
+      }
+      return;
+    }
 
     // 1. First Name
     if (/(first.*name|fname|given.*name)/i.test(ctx) && !/(last|full|legal.*name)/i.test(ctx)) {
@@ -622,7 +873,75 @@ function detectAndFillJobForm(customProfile) {
       return;
     }
 
-    // 18. Open screening questions (e.g. textarea or text input with questions)
+    // 18. Job Title
+    if (
+      /(job.*title|position.*title|role.*title|^title$|position.*held)/i.test(ctx) &&
+      el.tagName.toLowerCase() !== "textarea" &&
+      !/(school|degree|university|institution|mr|mrs|ms|salutation|prefix|why|describe)/i.test(ctx)
+    ) {
+      const { entry } = getWorkHistoryEntry(el, "title");
+      if (entry && entry.job_title) {
+        if (el.tagName.toLowerCase() === "select") {
+          if (setNativeSelectValue(el, entry.job_title)) filledFields.push("Job Title");
+        } else {
+          if (setNativeInputValue(el, entry.job_title)) filledFields.push("Job Title");
+        }
+      }
+      return;
+    }
+
+    // 19. Company / Employer
+    if (
+      /(company.*name|employer|organization.*name|^company$|^organization$|\bcompany\b|\bemployer\b)/i.test(ctx) &&
+      el.tagName.toLowerCase() !== "textarea" &&
+      !/(school|university|college|institution|degree|url|website|site|domain|why|describe)/i.test(ctx)
+    ) {
+      const { entry } = getWorkHistoryEntry(el, "company");
+      if (entry && entry.company) {
+        if (el.tagName.toLowerCase() === "select") {
+          if (setNativeSelectValue(el, entry.company)) filledFields.push("Company");
+        } else {
+          if (setNativeInputValue(el, entry.company)) filledFields.push("Company");
+        }
+      }
+      return;
+    }
+
+    // 20. Employment Start Date ("From")
+    if (
+      /(^from$|\bfrom\b.*date|start.*date|employment.*start|from.*date|date.*from|start.*month|start.*year|from.*month|from.*year)/i.test(ctx) &&
+      el.tagName.toLowerCase() !== "textarea" &&
+      isWorkExperienceContext(el)
+    ) {
+      const subType = /(month)/i.test(ctx) ? "from_month" : (/(year)/i.test(ctx) ? "from_year" : "from");
+      const { entry } = getWorkHistoryEntry(el, subType);
+      if (entry && entry.from) {
+        if (fillEmploymentDate(el, entry.from, ctx)) filledFields.push("Employment Dates");
+      }
+      return;
+    }
+
+    // 21. Employment End Date ("To")
+    if (
+      /(^to$|\bto\b.*date|end.*date|employment.*end|to.*date|date.*to|end.*month|end.*year|to.*month|to.*year)/i.test(ctx) &&
+      el.tagName.toLowerCase() !== "textarea" &&
+      isWorkExperienceContext(el)
+    ) {
+      const subType = /(month)/i.test(ctx) ? "to_month" : (/(year)/i.test(ctx) ? "to_year" : "to");
+      const { entry } = getWorkHistoryEntry(el, subType);
+      if (entry) {
+        if (entry.is_current) {
+          if (el.tagName.toLowerCase() === "input" && (type === "text" || !type)) {
+            if (setNativeInputValue(el, "Present")) filledFields.push("Employment Dates");
+          }
+        } else if (entry.to) {
+          if (fillEmploymentDate(el, entry.to, ctx)) filledFields.push("Employment Dates");
+        }
+      }
+      return;
+    }
+
+    // 22. Open screening questions (e.g. textarea or text input with questions)
     if (el.tagName.toLowerCase() === "textarea" || (type === "text" && ctx.length > 25)) {
       if (!currentVal && ctx.length > 15) {
         openQuestions.push({

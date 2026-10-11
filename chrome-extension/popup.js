@@ -1167,6 +1167,15 @@ async function fetchCandidateProfile() {
     visa_sponsorship_needed: "No",
     willing_to_relocate: "Yes",
     gender: "Male",
+    work_history: [
+      {
+        job_title: "Full Stack Developer Intern",
+        company: "Yinolite Solution",
+        from: "2026-05",
+        to: "2026-06",
+        is_current: false,
+      },
+    ],
   };
   return candidateProfileCache;
 }

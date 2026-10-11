@@ -46,6 +46,9 @@ def test_candidate_profile_defaults():
     assert "linkedin.com" in profile["linkedin"]
     assert "github.com" in profile["github"]
     assert "Java" in profile["core_stack"]
+    assert len(profile["work_history"]) >= 1
+    assert profile["work_history"][0]["company"] == "Yinolite Solution"
+    assert profile["work_history"][0]["job_title"] == "Full Stack Developer Intern"
 
 
 def test_classify_question_intent():

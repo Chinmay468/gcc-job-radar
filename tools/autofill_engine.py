@@ -63,6 +63,15 @@ DEFAULT_CANDIDATE_PROFILE: Dict[str, Any] = {
         "production-ready backend services using Java, Spring Boot, Kafka, Docker, and React."
     ),
     "core_stack": ["Java", "Spring Boot", "Kafka", "Docker", "React.js", "Node.js", "MySQL", "MongoDB"],
+    "work_history": [
+        {
+            "job_title": "Full Stack Developer Intern",
+            "company": "Yinolite Solution",
+            "from": "2026-05",
+            "to": "2026-06",
+            "is_current": False,
+        }
+    ],
 }
 
 
