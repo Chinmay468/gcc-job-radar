@@ -129,3 +129,50 @@ async def test_search_internet_jobs_serper_mock(tmp_path: Path) -> None:
         # Verify persisted into DB
         db_jobs = get_latest_jobs(status="ALL", db_path=test_db)
         assert any(j["company"] == "Datadog" for j in db_jobs)
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_non_tech_and_handles_it_query(tmp_path: Path) -> None:
+    """Verify non-tech roles (copywriter, writer, assistant) are suppressed and word boundary matching works."""
+    from gcc_job_radar.internet_search import _matches_query_terms, SEARCH_STOP_WORDS
+
+    # 1. Whole-word matching: 'it' must not match 'writer' or 'copywriter'
+    assert not _matches_query_terms(["it"], "freelance writer writing")
+    assert not _matches_query_terms(["it"], "freelance copywriter")
+    assert not _matches_query_terms(["it"], "remote office assistant")
+    assert _matches_query_terms(["it"], "it consultant technology")
+    assert "it" in SEARCH_STOP_WORDS
+
+    test_db = tmp_path / "test_non_tech.db"
+    init_db(test_db)
+
+    with patch("gcc_job_radar.internet_search.os.getenv", return_value="fake_serper_key"), \
+         patch("gcc_job_radar.internet_search._search_serper_ats", new_callable=AsyncMock) as mock_serper, \
+         patch("gcc_job_radar.internet_search._search_remotive_jobs", new_callable=AsyncMock) as mock_remotive, \
+         patch("gcc_job_radar.internet_search._search_arbeitnow_jobs", new_callable=AsyncMock) as mock_arbeitnow:
+
+        mock_serper.return_value = []
+        # Simulate Remotive returning non-tech items
+        mock_remotive.return_value = [
+            {"title": "Freelance Writer", "company": "IAPWE", "apply_url": "https://remotive.com/1", "snippet": "Writing"},
+            {"title": "Freelance Copywriter", "company": "Coalition", "apply_url": "https://remotive.com/2", "snippet": "Copy"},
+            {"title": "Remote Office Assistant", "company": "Coalition", "apply_url": "https://remotive.com/3", "snippet": "Assistant"},
+            {"title": "IT Consultant", "company": "ThoughtWorks", "apply_url": "https://thoughtworks.com/4", "snippet": "IT consulting"},
+        ]
+        mock_arbeitnow.return_value = []
+
+        results = await search_internet_jobs(
+            query="it consultant at greenhouse",
+            location="India",
+            limit=5,
+            db_path=test_db,
+        )
+
+        # Non-tech roles must be completely filtered out
+        titles = [j.title for j in results]
+        assert "Freelance Writer" not in titles
+        assert "Freelance Copywriter" not in titles
+        assert "Remote Office Assistant" not in titles
+        # Valid IT Consultant should remain
+        assert "IT Consultant" in titles
+

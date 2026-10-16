@@ -5918,6 +5918,10 @@ EXCLUDE_TITLE_PATTERN: re.Pattern[str] = re.compile(
         operations(?:\s+executive)?|back\s+office|field\s+executive|telecaller|
         finance|legal|compliance|business\s+development|bdr|sdr|
         ca\s+intern|ca\s+industrial|chartered\s+accountant|accounting|taxation|audit|
+        # Content, writing, administrative, and office assistants
+        writer|copywriter|content\s+writer|editorial|journalist|proofreader|
+        office\s+assistant|virtual\s+assistant|administrative\s+assistant|executive\s+assistant|
+        personal\s+assistant|clerk|data\s+entry|transcriptionist|
         # Warehouse / logistics / retail operations
         bbd\b|bbd['\u2019]?\d*|spoc\b|dark\s+stores?|desktop\s+support|l1\s+support|
         helpdesk|service\s+desk|hardware\s+support|station\s+request|seller\s+management|seller\s+support|

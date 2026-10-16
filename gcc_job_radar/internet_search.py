@@ -120,11 +120,26 @@ async def _search_serper_ats(
     clean_query = query.strip()
     clean_loc = location.strip() if location else "India"
 
+    # Strip conversational prefixes and redundant board specifications (e.g. 'at greenhouse')
+    norm_query = re.sub(
+        r"(?i)^(?:can\s+u\s+find|can\s+you\s+find|find\s+me|find|search\s+for|search|show\s+me|show)\s+(?:openings?\s+(?:of|for)|jobs?\s+(?:of|for)|roles?\s+(?:of|for)|a\s+|an\s+)?",
+        "",
+        clean_query,
+    ).strip()
+    norm_query = re.sub(r"(?i)\s+at\s+(?:greenhouse|lever|ashby|workday|ats)$", "", norm_query).strip()
+    if not norm_query:
+        norm_query = clean_query
+
     # Support modern AI / vibe coder queries with semantic expansion
-    if re.search(r"\bvibe\s*cod(?:er|ing)?\b", clean_query, re.IGNORECASE):
+    if re.search(r"\bvibe\s*cod(?:er|ing)?\b", norm_query, re.IGNORECASE):
         dork_query = '("vibe coder" OR "AI Engineer" OR "Full Stack" "Cursor" OR "LLM")'
     else:
-        dork_query = f'"{clean_query}"'
+        # Wrap in quotes only if single token or short clean phrase without punctuation,
+        # otherwise keep unquoted so Google/Serper can perform typo correction and natural matching
+        if len(norm_query.split()) <= 3 and not any(ch in norm_query for ch in '",;:?'):
+            dork_query = f'"{norm_query}"'
+        else:
+            dork_query = norm_query
 
     is_fresher_req = any(term in experience.lower() for term in ("entry", "fresher", "junior", "intern", "0-2", "new grad"))
     exp_exclusion = " -senior -lead -staff -principal -director -manager -vp -architect -head" if is_fresher_req else ""
@@ -190,6 +205,21 @@ async def _search_serper_ats(
     return results
 
 
+SEARCH_STOP_WORDS = {
+    "a", "an", "the", "for", "in", "at", "to", "and", "or", "of", "with",
+    "job", "jobs", "role", "roles", "fresher", "freshers", "opening", "openings", "hiring",
+    "can", "u", "you", "find", "search", "show", "me", "my", "give", "tell", "is", "on", "from",
+    "it",  # Common English pronoun (e.g. 'find opening of it...')
+}
+
+
+def _matches_query_terms(query_words: list[str], search_corpus: str) -> bool:
+    """Ensure query keywords match as whole words, avoiding substring false positives (e.g. 'it' inside 'writer')."""
+    if not query_words:
+        return True
+    return any(re.search(rf"\b{re.escape(qw)}\b", search_corpus) for qw in query_words)
+
+
 async def _search_remotive_jobs(
     client: httpx.AsyncClient,
     query: str,
@@ -207,20 +237,19 @@ async def _search_remotive_jobs(
         results: list[dict[str, Any]] = []
 
         # Keywords to match
-        stop_words = {"a", "an", "the", "for", "in", "at", "to", "and", "or", "of", "with", "job", "jobs", "role", "roles", "fresher", "freshers", "opening", "openings", "hiring"}
-        query_words = [w.lower() for w in re.findall(r"\b[A-Za-z0-9+#.-]+\b", query) if w.lower() not in stop_words and len(w) > 1]
+        query_words = [w.lower() for w in re.findall(r"\b[A-Za-z0-9+#.-]+\b", query) if w.lower() not in SEARCH_STOP_WORDS and len(w) > 1]
 
         for item in data.get("jobs", []):
             title = item.get("title", "Software Engineer")
             sanitized_t = _MTS_MASK_PATTERN.sub("mts_role", title)
-            # Strictly reject senior / lead roles from Remotive
+            # Strictly reject senior / lead / non-tech roles from Remotive
             if EXCLUDE_TITLE_PATTERN.search(sanitized_t):
                 continue
 
             # Must have at least one keyword match if specific query words provided
             tags = [str(t).lower() for t in item.get("tags", [])]
             search_corpus = f"{title} {' '.join(tags)}".lower()
-            if query_words and not any(qw in search_corpus for qw in query_words):
+            if not _matches_query_terms(query_words, search_corpus):
                 continue
 
             req_loc = str(item.get("candidate_required_location", "")).lower()
@@ -253,19 +282,18 @@ async def _search_arbeitnow_jobs(
         data = resp.json()
         results: list[dict[str, Any]] = []
 
-        stop_words = {"a", "an", "the", "for", "in", "at", "to", "and", "or", "of", "with", "job", "jobs", "role", "roles", "fresher", "freshers", "opening", "openings", "hiring"}
-        query_words = [w.lower() for w in re.findall(r"\b[A-Za-z0-9+#.-]+\b", query) if w.lower() not in stop_words and len(w) > 1]
+        query_words = [w.lower() for w in re.findall(r"\b[A-Za-z0-9+#.-]+\b", query) if w.lower() not in SEARCH_STOP_WORDS and len(w) > 1]
 
         for item in data.get("data", []):
             title = item.get("title", "Developer")
             sanitized_t = _MTS_MASK_PATTERN.sub("mts_role", title)
-            # Strictly reject senior / lead roles from Arbeitnow
+            # Strictly reject senior / lead / non-tech roles from Arbeitnow
             if EXCLUDE_TITLE_PATTERN.search(sanitized_t):
                 continue
 
             tags = [str(t).lower() for t in item.get("tags", [])]
             search_corpus = f"{title} {' '.join(tags)}".lower()
-            if query_words and not any(qw in search_corpus for qw in query_words):
+            if not _matches_query_terms(query_words, search_corpus):
                 continue
 
             is_remote = bool(item.get("remote", False))
@@ -349,10 +377,10 @@ async def search_internet_jobs(
         if company.lower() in applied_comps or company.lower() in dismissed_comps:
             continue
 
-        # Suppress senior or experienced roles when searching for entry-level / fresher
+        # Suppress senior and non-tech roles
         is_fresher_req = any(term in experience.lower() for term in ("entry", "fresher", "junior", "intern", "0-2", "new grad"))
         sanitized_title = _MTS_MASK_PATTERN.sub("mts_role", title)
-        if is_fresher_req and EXCLUDE_TITLE_PATTERN.search(sanitized_title):
+        if EXCLUDE_TITLE_PATTERN.search(sanitized_title):
             continue
 
         snippet = item.get("snippet", "")

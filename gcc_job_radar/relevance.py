@@ -59,6 +59,7 @@ NON_STACK_DISQUALIFIERS: list[tuple[re.Pattern[str], int]] = [
     (re.compile(r"(?i)\b(?:embedded|firmware|hardware|vlsi|verilog)\b"), 30),
     (re.compile(r"(?i)\b(?:salesforce|apex|sap|abap|servicenow)\b"), 30),
     (re.compile(r"(?i)\b(?:ruby|rails|php|laravel|c#|\.net)\b"), 20),
+    (re.compile(r"(?i)\b(?:writer|copywriter|editorial|assistant|clerk|data\s+entry|transcriptionist)\b"), 50),
 ]
 
 # Degree Requirement Risk (strict CS-only degree requirements without 'or related' escape hatch)
@@ -239,10 +240,14 @@ def evaluate_job_relevance(
         from gcc_job_radar.filters import _MTS_MASK_PATTERN, requires_experienced_candidate
 
         sanitized_t = _MTS_MASK_PATTERN.sub("mts_role", title)
-        is_senior = bool(EXCLUDE_TITLE_PATTERN.search(sanitized_t))
-        is_experienced = is_senior or requires_experienced_candidate(title) or requires_experienced_candidate(description)
+        is_excluded_title = bool(EXCLUDE_TITLE_PATTERN.search(sanitized_t))
+        is_experienced = requires_experienced_candidate(title) or requires_experienced_candidate(description)
 
-        if is_experienced:
+        if is_excluded_title:
+            why = "Non-target or excluded role"
+            if is_remote:
+                why += " • Remote-friendly"
+        elif is_experienced:
             why = "Experienced tech role (requires prior experience)"
             if is_remote:
                 why += " • Remote-friendly"
