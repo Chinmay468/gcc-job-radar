@@ -1876,10 +1876,20 @@ async def _fallback_response(
     title_keywords = [
         "software", "sde", "engineer", "developer", "backend", "frontend",
         "fullstack", "python", "java", "data", "machine learning", "ai",
-        "cloud", "intern", "graduate", "analyst", "qa", "devops", "security"
+        "cloud", "intern", "graduate", "analyst", "qa", "devops", "security",
+        "consultant", "support", "platform", "system"
     ]
     matched_title = next((kw for kw in title_keywords if kw in q), None)
     matched_comp_name = matched_companies[0].name if matched_companies else None
+
+    is_explicit_role_search = bool(
+        re.search(
+            r"\b(?:find|search|look\s+for)\s+(?:openings?|jobs?|roles?)\s+(?:for|of|in|at)\b"
+            r"|\b(?:openings?|jobs?|roles?)\s+(?:for|of)\s+[a-z0-9]",
+            q,
+            re.IGNORECASE,
+        )
+    )
 
     if matched_location or matched_title or matched_comp_name:
         res = await execute_tool(
@@ -1906,12 +1916,35 @@ async def _fallback_response(
 
         if jobs:
             return format_jobs_html(jobs, header)
+        elif is_explicit_role_search and not matched_comp_name:
+            net_res = await execute_tool(
+                "search_internet_jobs",
+                {
+                    "query": query,
+                    "location": matched_location.title() if matched_location else "India",
+                    "limit": 5,
+                },
+                db_path=db_path,
+            )
+            return format_tool_result_summary("search_internet_jobs", net_res)
         else:
             return (
                 f"ℹ️ <b>{html.escape(header)}</b>\n\n"
                 f"No entry-level postings currently found in the local database matching your query.\n"
                 f"Try <code>/scan</code> to refresh all 150+ boards or <code>/check {matched_comp_name or 'company'}</code> for a live scan."
             )
+
+    if is_explicit_role_search:
+        net_res = await execute_tool(
+            "search_internet_jobs",
+            {
+                "query": query,
+                "location": matched_location.title() if matched_location else "India",
+                "limit": 5,
+            },
+            db_path=db_path,
+        )
+        return format_tool_result_summary("search_internet_jobs", net_res)
 
     # 6. Generic helpful response
     if as_markdown:
@@ -2031,10 +2064,15 @@ async def _call_gemini(
             tool_result = await execute_tool(tool_name, tool_args, db_path=db_path)
             last_tool_name = tool_name
             last_tool_result = tool_result
+            llm_tool_res = (
+                {k: v for k, v in tool_result.items() if k != "html"}
+                if isinstance(tool_result, dict)
+                else tool_result
+            )
             response_parts.append({
                 "functionResponse": {
                     "name": tool_name,
-                    "response": tool_result,
+                    "response": llm_tool_res,
                 }
             })
 
@@ -2066,13 +2104,18 @@ async def _call_openai_compatible(
         "Content-Type": "application/json",
     }
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    sys_content = (
+        SYSTEM_PROMPT.split("FEW-SHOT EXAMPLES")[0].strip()
+        if provider_name == "Groq"
+        else SYSTEM_PROMPT
+    )
+    messages: list[dict[str, Any]] = [{"role": "system", "content": sys_content}]
     # Prune history to last 4 turns (2 conversational turns) and cap length to preserve token budget
     recent_history = history[-4:] if len(history) > 4 else history
     for turn in recent_history:
         turn_content = turn["content"]
-        if len(turn_content) > 1500:
-            turn_content = turn_content[:1500] + "..."
+        if len(turn_content) > 800:
+            turn_content = turn_content[:800] + "..."
         messages.append({"role": turn["role"], "content": turn_content})
     messages.append({"role": "user", "content": prompt})
 
@@ -2093,20 +2136,20 @@ async def _call_openai_compatible(
             err_msg = f"[AI Agent Error] {provider_name} request failed (connection/timeout): {exc}"
             _safe_print(err_msg, file=sys.stderr)
             logger.error(err_msg)
-            return None
+            break
 
         # Handle rate limits or payload too large (e.g. Groq 413 / 429 TPM exhaustion)
         if resp.status_code in (413, 429):
             err_msg = f"[AI Agent Error] {provider_name} rate/size limit reached (HTTP {resp.status_code}): {resp.text}"
             _safe_print(err_msg, file=sys.stderr)
             logger.warning(err_msg)
-            return None
+            break
 
         if resp.status_code != 200:
             err_msg = f"[AI Agent Error] {provider_name} API error (HTTP {resp.status_code}): {resp.text}"
             _safe_print(err_msg, file=sys.stderr)
             logger.error(err_msg)
-            return None
+            break
 
         data = resp.json()
         choice = data.get("choices", [{}])[0]
@@ -2120,7 +2163,7 @@ async def _call_openai_compatible(
             err_msg = f"[AI Agent Error] {provider_name} response had no content and no tool_calls: {msg}"
             _safe_print(err_msg, file=sys.stderr)
             logger.error(err_msg)
-            return None
+            break
 
         # Append assistant tool calls turn
         messages.append(msg)
@@ -2135,15 +2178,21 @@ async def _call_openai_compatible(
             res = await execute_tool(fn_name, fn_args, db_path=db_path)
             last_tool_name = fn_name
             last_tool_result = res
-            res_str = json.dumps(res)
-            # Ensure tool result does not blow TPM budget (cap at 3500 chars)
-            if len(res_str) > 3500:
-                if isinstance(res, dict) and "jobs" in res and len(res["jobs"]) > 8:
-                    res["jobs"] = res["jobs"][:8]
-                    res["note"] = "Results capped to 8 for token budget."
-                    res_str = json.dumps(res)
-                if len(res_str) > 3500:
-                    res_str = res_str[:3450] + '..."}'
+            llm_res = (
+                {k: v for k, v in res.items() if k != "html"}
+                if isinstance(res, dict)
+                else res
+            )
+            res_str = json.dumps(llm_res)
+            # Ensure tool result does not blow TPM budget (cap at 2200 chars)
+            if len(res_str) > 2200:
+                if isinstance(llm_res, dict) and "jobs" in llm_res and len(llm_res["jobs"]) > 6:
+                    llm_res = dict(llm_res)
+                    llm_res["jobs"] = llm_res["jobs"][:6]
+                    llm_res["note"] = "Results capped to 6 for token budget."
+                    res_str = json.dumps(llm_res)
+                if len(res_str) > 2200:
+                    res_str = res_str[:2150] + '..."}'
 
             messages.append({
                 "role": "tool",
