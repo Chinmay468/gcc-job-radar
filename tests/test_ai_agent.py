@@ -1053,3 +1053,102 @@ async def test_execute_tool_get_configured_companies_enriched_metadata(tmp_path:
     assert "ashby" in res["ats_provider_breakdown"]
     assert "note" in res
 
+
+def test_email_revert_detector_classification_and_extraction() -> None:
+    """Verify rejection classification prioritizes rejections over 'interview' words and parses company/role."""
+    from gcc_job_radar.email_revert_detector import (
+        RevertType,
+        classify_email_content,
+        extract_company_and_role,
+    )
+
+    # 1. Rejection email that mentions the word "interview" ("will not be moving forward to the interview stage")
+    subj1 = "Your application to Software Development Engineer - I at Groww"
+    sender1 = "Groww Careers <no-reply@ashbyhq.com>"
+    body1 = (
+        "Thank you for applying to Groww. Unfortunately, we will not be moving forward "
+        "with your application to the interview stage at this time."
+    )
+    rtype1, _ = classify_email_content(subj1, sender1, body1)
+    assert rtype1 == RevertType.REJECTED
+    comp1, role1 = extract_company_and_role(subj1, sender1, body1)
+    assert comp1 == "Groww"
+    assert "Software Development Engineer" in role1
+
+    # 2. Workday rejection email
+    subj2 = "Important information regarding your application"
+    sender2 = "nike@myworkday.com"
+    body2 = (
+        "Thank you for your interest in R-85669 Software Engineer I, ITC at NIKE. "
+        "We have decided to pursue other candidates who more closely match our requirements."
+    )
+    rtype2, _ = classify_email_content(subj2, sender2, body2)
+    assert rtype2 == RevertType.REJECTED
+    comp2, role2 = extract_company_and_role(subj2, sender2, body2)
+    assert comp2.upper() == "NIKE"
+    assert "R-85669 Software Engineer I" in role2
+
+    # 3. Job alert newsletter noise must be ignored
+    subj3 = "9 new Software Engineer jobs in Bengaluru"
+    sender3 = "jobalerts-noreply@linkedin.com"
+    body3 = "Here are new jobs matching your alert."
+    rtype3, _ = classify_email_content(subj3, sender3, body3)
+    assert rtype3 == RevertType.UNKNOWN
+
+
+@pytest.mark.asyncio
+async def test_ask_ai_agent_email_rejections_routing(tmp_path: Path, monkeypatch) -> None:
+    """Verify 'check all emails to check how many rejections i got' calls check_email_rejections and not sync_email_jobs."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    db_file = tmp_path / "test_rejs.db"
+    init_db(db_file)
+
+    from datetime import datetime, timezone
+
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    mock_scan_res = {
+        "accounts_checked": [
+            "chinmay8064@gmail.com",
+            "chinmaymaheshwari.it27@gmail.com",
+            "chinmaymaheshwari.it27@jecrc.ac.in",
+        ],
+        "reverts": [
+            {
+                "status": "REJECTED",
+                "company": "Optiver",
+                "role": "Graduate Software Engineer",
+                "subject": "An update on your application from Optiver",
+                "sender": "Optiver <no-reply@optiver.com>",
+                "date": today_str,
+                "account": "chinmaymaheshwari.it27@gmail.com",
+            },
+            {
+                "status": "REJECTED",
+                "company": "Groww",
+                "role": "Software Development Engineer - I",
+                "subject": "Your application to Software Development Engineer - I at Groww",
+                "sender": "Groww <no-reply@ashbyhq.com>",
+                "date": today_str,
+                "account": "chinmaymaheshwari.it27@gmail.com",
+            },
+        ],
+        "counts": {"REJECTED": 2, "INTERVIEW": 0, "OA_INVITE": 0, "ACKNOWLEDGED": 0},
+        "db_updates": [],
+    }
+
+    with patch("gcc_job_radar.email_revert_detector.scan_email_reverts", return_value=mock_scan_res):
+        reply = await ask_ai_agent(
+            "check all emails to check how many rejections i got",
+            chat_id="test-rej-chat",
+            db_path=db_file,
+        )
+        assert "Email Rejection &amp; Status Scan Summary" in reply
+        assert "Optiver" in reply
+        assert "Groww" in reply
+        assert "Graduate Software Engineer" in reply
+        assert "chinmaymaheshwari.it27@gmail.com" in reply
+
+

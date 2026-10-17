@@ -64,9 +64,14 @@ SYSTEM_PROMPT = (
     "CRITICAL CAPABILITY — DIRECT EMAIL INBOX ACCESS:\n"
     "- YOU HAVE FULL DIRECT ACCESS TO THE USER'S CONFIGURED EMAIL ACCOUNTS.\n"
     "- The user has 3 active email accounts configured in .env with authorized IMAP SSL credentials (chinmay8064@gmail.com, chinmaymaheshwari.it27@gmail.com, chinmaymaheshwari.it27@jecrc.ac.in).\n"
-    "- When the user asks to check, scan, go through, or sync their email accounts / inbox for jobs, job alerts, or emails (e.g. 'Go through all 3 email accounts for new relevant jobs', 'check my emails for jobs', 'scan inbox for job alerts', 'sync emails'), ALWAYS invoke the `sync_email_jobs` tool immediately.\n"
-    "- NEVER say 'I am not able to access your email accounts directly' or 'I don't have access to your email'. You DO have direct access via `sync_email_jobs`.\n\n"
-    "- ONLY invoke tools (`check_company_live`, `query_jobs`, `search_internet_jobs`, `sync_email_jobs`, `scan_acciojob_portal`, `get_applied_jobs`, `get_dismissed_jobs`, `manage_job_status`) when searching for job openings or checking company/email status. NEVER invoke them for compensation, CTC, salary inquiries, interview advice, resume tips, or general role comparisons. ATS endpoints do NOT contain Indian CTC/compensation figures.\n"
+    "- REJECTION & APPLICATION STATUS SCANNING (`check_email_rejections`):\n"
+    "  • Whenever the user asks how many rejections they got, asks to check/scan emails for rejections, application updates, declined applications, or recruiter replies (e.g. 'check all emails to check how many rejections i got', 'how many rejections did I get', 'scan inbox for rejections', 'any rejection emails?'), ALWAYS invoke `check_email_rejections` immediately.\n"
+    "  • NEVER invoke `sync_email_jobs` for rejection or application status queries (`sync_email_jobs` ONLY parses new job alert newsletters and ignores rejection emails).\n"
+    "  • Report the exact `rejections_last_30_days` and `total_rejections` counts, list the rejected companies with their roles and dates from the tool output, and NEVER claim 'No rejection emails found' when `total_rejections > 0`.\n"
+    "- NEW JOB ALERT INGESTION (`sync_email_jobs`):\n"
+    "  • When the user asks to check, scan, go through, or sync their email accounts / inbox for NEW jobs or job alerts (e.g. 'Go through all 3 email accounts for new relevant jobs', 'check my emails for jobs', 'scan inbox for job alerts', 'sync emails'), ALWAYS invoke the `sync_email_jobs` tool immediately.\n"
+    "- NEVER say 'I am not able to access your email accounts directly' or 'I don't have access to your email'. You DO have direct access via `check_email_rejections` and `sync_email_jobs`.\n\n"
+    "- ONLY invoke tools (`check_company_live`, `query_jobs`, `search_internet_jobs`, `sync_email_jobs`, `check_email_rejections`, `scan_acciojob_portal`, `get_applied_jobs`, `get_dismissed_jobs`, `manage_job_status`) when searching for job openings or checking company/email status. NEVER invoke them for compensation, CTC, salary inquiries, interview advice, resume tips, or general role comparisons. ATS endpoints do NOT contain Indian CTC/compensation figures.\n"
     "- DISCOVERY & FINDING JOBS VS DATABASE QUERY:\n"
     "  • ALWAYS invoke `search_internet_jobs` when the user asks to find, search, or look for ANY job role, profession, domain, tech stack, or location (e.g. 'find me a vibe coder job for a fresher', 'find Java roles in Bangalore', 'search for React jobs', 'find frontend internships').\n"
     "  • Modern Role Aliases ('vibe coder', 'AI coder', 'AI-assisted engineer'): Vibe coding refers to building applications using AI tools (Cursor, Claude, Copilot, ChatGPT). Pass `query='vibe coder'` or `query='AI Engineer'` to `search_internet_jobs`. NEVER dump random unrelated jobs!\n"
@@ -76,10 +81,10 @@ SYSTEM_PROMPT = (
     "- Use `get_dismissed_jobs` whenever the user asks for dismissed jobs, dismissed companies, hidden jobs, 'name of all', 'names of all companies', 'list all dismissed', or asks which companies/roles have been dismissed. ALWAYS invoke `get_dismissed_jobs` to retrieve the comprehensive list of ALL dismissed companies and total count from the database instead of guessing or listing only 4-5 from recent chat context.\n"
     "- Use `manage_job_status` when the user asks to dismiss, hide, apply, mark as applied, or restore/undismiss jobs by ID number (e.g. 'dismiss job 1 and 4') or company name (e.g. 'dismiss Devmani Traders', 'mark BT Group as applied', 'restore job 2', 'applied to uipath, celonis', 'dismiss wysa, katalystcs, tvaram, WSP, betterworks'). Dismissing companies by name permanently suppresses them from future scans, email alerts, and daily digests, even if they have no currently active listings in the local database.\n"
     "- Use `tailor_job_resume` when the user asks to tailor, customize, adapt, or generate a resume/CV for a specific job (e.g. 'tailor my resume for Flipkart', 'generate a resume for job 1', 'tailor resume for Amazon SDE-1').\n"
-    "- Use `sync_email_jobs` ONLY when the user explicitly asks to scan, check, go through, or ingest job alert emails (e.g. 'check my email', 'scan inbox', 'sync email alerts') from their configured email accounts.\n"
+    "- Use `sync_email_jobs` ONLY when the user explicitly asks to scan, check, go through, or ingest NEW job alert emails (e.g. 'check my email for jobs', 'scan inbox for job alerts', 'sync email alerts') from their configured email accounts. If they ask for rejections or application updates in email, use `check_email_rejections` instead.\n"
     "- FOR GENERAL STATUS OR UPDATE QUERIES (e.g. 'Any new update', 'Any updates?', 'What\\'s new?', 'Show new openings'): ALWAYS invoke `query_jobs(status='NEW', limit=5)` to retrieve the latest open listings from the tracker database. DO NOT invoke `sync_email_jobs` unless emails/inboxes are specifically requested.\n"
     "- Use `scan_acciojob_portal` whenever the user asks to check, scan, or fetch fresh early-career tech jobs and hiring drives from the AccioJob portal.\n"
-    "- NEVER mention internal function or tool names (such as `manage_job_status`, `query_jobs`, `get_applied_jobs`, `sync_email_jobs`, `search_internet_jobs`, `execute_tool`) to the user. Always advise the user using standard user-facing commands (e.g. `/search <profession>`, `/apply <id>`, `/applied`, `/dismiss <id>`, `/scan`, `/sync`).\n"
+    "- NEVER mention internal function or tool names (such as `manage_job_status`, `query_jobs`, `get_applied_jobs`, `sync_email_jobs`, `check_email_rejections`, `search_internet_jobs`, `execute_tool`) to the user. Always advise the user using standard user-facing commands (e.g. `/search <profession>`, `/rejections`, `/apply <id>`, `/applied`, `/dismiss <id>`, `/scan`, `/sync`).\n"
     "- FILTERING APPLIED AND DISMISSED COMPANIES: By default, NEVER show or suggest roles or company names that the user has already marked as APPLIED or DISMISSED, unless the user specifically asks for 'all' (e.g. 'show all', 'all companies', 'include dismissed'). `query_jobs` and `get_configured_companies` accept `include_all`: only set `include_all=True` when specifically asked for all companies/jobs.\n\n"
     "DOMAIN KNOWLEDGE FOR COMPENSATION & CTC QUERIES IN INDIA:\n"
     "- When asked about compensation, CTC, or salary thresholds (e.g. 'which role offers CTC over 12 lakhs?'):\n"
@@ -97,7 +102,7 @@ SYSTEM_PROMPT = (
     "  • Higher points indicate a higher match with the candidate's target tech stack. Roles with 0 pts are still verified entry-level tech roles, but without explicit keywords matching those specific stack skills in their title or description.\n\n"
     "DOMAIN KNOWLEDGE FOR COMPANY REGISTRY & SCRAPER ARCHITECTURE:\n"
     "- TOTAL TRACKED COMPANIES: 5,313 companies in the active registry.\n"
-    "- DEDICATED CUSTOM CAREER PORTAL SCRAPERS (NON-ATS) — EXACTLY 6 COMPANIES:\n"
+    "- DEDICATED CUSTOM CAREER CAREER PORTAL SCRAPERS (NON-ATS) — EXACTLY 6 COMPANIES:\n"
     "  • These 6 companies do NOT use standard ATS job boards (like Greenhouse, Ashby, Lever, etc.) and instead have proprietary career portals with dedicated custom API/DOM scrapers:\n"
     "    1. Flipkart (Custom Turbohire internal portal scraper)\n"
     "    2. Apple (Official Apple Jobs Search API scraper)\n"
@@ -331,13 +336,23 @@ GEMINI_TOOLS = [
             },
             {
                 "name": "sync_email_jobs",
-                "description": "Scan and ingest job alert emails directly from the user's 3 configured email accounts (e.g. LinkedIn, Naukri, Indeed, Glassdoor, AccioJob alerts via IMAP SSL). Extracts verified entry-level tech openings, saves them to the database, and returns the findings. ALWAYS use when user asks to check, scan, or go through their emails or inboxes for jobs.",
+                "description": "Scan and ingest NEW job alert emails directly from the user's 3 configured email accounts (LinkedIn, Naukri, Indeed, Glassdoor, AccioJob alerts via IMAP SSL). ONLY use when user asks to check emails for NEW job openings/alerts. DO NOT use when user asks to check emails for rejections or application status updates (use check_email_rejections instead).",
                 "parameters": {
                     "type": "OBJECT",
                     "properties": {
                         "days": {"type": "INTEGER", "description": "Number of days back to search emails (default 7)."},
                         "limit": {"type": "INTEGER", "description": "Maximum emails to inspect per mailbox (default 15)."},
                         "unread_only": {"type": "BOOLEAN", "description": "Set to true to check only unread emails, or false to inspect all recent alert emails while deduplicating against database. Defaults to false."},
+                    },
+                },
+            },
+            {
+                "name": "check_email_rejections",
+                "description": "Scan all 3 configured email accounts (chinmay8064@gmail.com, chinmaymaheshwari.it27@gmail.com, chinmaymaheshwari.it27@jecrc.ac.in) via IMAP SSL for job application rejection notices, declined applications, and recruiter status updates (across Workday, Greenhouse, Ashby, Lever, Superset, and direct company emails). ALWAYS invoke when the user asks how many rejections they got, asks to check emails for rejections, or asks for application status updates in their inbox.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "days": {"type": "INTEGER", "description": "Number of days back to scan across all 3 email accounts (default 90)."},
                     },
                 },
             },
@@ -494,13 +509,26 @@ OPENAI_TOOLS = [
         "type": "function",
         "function": {
             "name": "sync_email_jobs",
-            "description": "Scan and ingest job alert emails directly from the user's 3 configured email accounts (e.g. LinkedIn, Naukri, Indeed, Glassdoor, AccioJob alerts via IMAP SSL). Extracts verified entry-level tech openings, saves them to the database, and returns the findings. ALWAYS use when user asks to check, scan, or go through their emails or inboxes for jobs.",
+            "description": "Scan and ingest NEW job alert emails directly from the user's 3 configured email accounts (LinkedIn, Naukri, Indeed, Glassdoor, AccioJob alerts via IMAP SSL). ONLY use when user asks to check emails for NEW job openings/alerts. DO NOT use when user asks to check emails for rejections or application status updates (use check_email_rejections instead).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "days": {"type": "integer", "description": "Number of days back to search emails (default 7)."},
                     "limit": {"type": "integer", "description": "Maximum emails to inspect per mailbox (default 15)."},
                     "unread_only": {"type": "boolean", "description": "Set to true to check only unread emails, or false to inspect all recent alert emails while deduplicating against database. Defaults to false."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_email_rejections",
+            "description": "Scan all 3 configured email accounts (chinmay8064@gmail.com, chinmaymaheshwari.it27@gmail.com, chinmaymaheshwari.it27@jecrc.ac.in) via IMAP SSL for job application rejection notices, declined applications, and recruiter status updates (across Workday, Greenhouse, Ashby, Lever, Superset, and direct company emails). ALWAYS invoke when the user asks how many rejections they got, asks to check emails for rejections, or asks for application status updates in their inbox.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Number of days back to scan across all 3 email accounts (default 90)."},
                 },
             },
         },
@@ -1002,7 +1030,6 @@ async def execute_tool(
         unread_only = bool(args.get("unread_only", False))
 
         from tools.ingest_email import sync_email_alerts, get_configured_email_accounts
-        import asyncio
 
         accounts = get_configured_email_accounts()
         jobs = await asyncio.to_thread(
@@ -1033,6 +1060,68 @@ async def execute_tool(
             "total_found": len(jobs),
             "jobs": compact_jobs,
             "note": f"Scanned {len(accounts)} configured email account(s) and found {len(jobs)} relevant opening(s). Present newly found jobs clearly using structured job cards.",
+        }
+
+    elif name == "check_email_rejections":
+        days = int(args.get("days", 90))
+        from gcc_job_radar.email_revert_detector import scan_email_reverts
+        from datetime import datetime, timedelta, timezone
+
+        scan_res = await asyncio.to_thread(
+            scan_email_reverts,
+            days=days,
+            update_db=True,
+            db_path=db_path,
+        )
+        accounts = scan_res.get("accounts_checked", [])
+        reverts = scan_res.get("reverts", [])
+        rejections = [r for r in reverts if r.get("status") == "REJECTED"]
+        interviews = [r for r in reverts if r.get("status") in ("INTERVIEW", "OA_INVITE")]
+        acknowledged = [r for r in reverts if r.get("status") == "ACKNOWLEDGED"]
+
+        cutoff_30d = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
+        recent_30d = [r for r in rejections if (r.get("date") or "") >= cutoff_30d]
+        older_rejs = [r for r in rejections if (r.get("date") or "") < cutoff_30d]
+
+        def _fmt_item(r: dict[str, Any]) -> dict[str, str]:
+            return {
+                "company": str(r.get("company") or "Unknown"),
+                "role": str(r.get("role") or "Application"),
+                "date": str(r.get("date") or "Recent"),
+                "account": str(r.get("account") or ""),
+            }
+
+        recent_compact = [_fmt_item(r) for r in recent_30d]
+        older_compact = [_fmt_item(r) for r in older_rejs]
+        interview_compact = [
+            {
+                "company": str(r.get("company") or "Unknown"),
+                "role": str(r.get("role") or "Application"),
+                "status": str(r.get("status") or "INTERVIEW"),
+                "date": str(r.get("date") or "Recent"),
+                "account": str(r.get("account") or ""),
+            }
+            for r in interviews
+        ]
+
+        return {
+            "status": "success",
+            "days_scanned": days,
+            "accounts_checked": accounts,
+            "rejections_last_30_days_count": len(recent_compact),
+            "total_rejections_count": len(rejections),
+            "rejections_last_30_days": recent_compact,
+            "earlier_rejections": older_compact,
+            "interviews_or_oa_count": len(interview_compact),
+            "interviews_or_oa": interview_compact,
+            "acknowledged_count": len(acknowledged),
+            "db_updated_count": len(scan_res.get("db_updates", [])),
+            "note": (
+                f"Scanned {len(accounts)} email account(s) over the last {days} days. "
+                f"Found {len(recent_compact)} rejection(s) in the last 30 days "
+                f"({len(rejections)} total rejections across {days} days). "
+                "Report the exact count and list every rejected company, role, date, and email account clearly."
+            ),
         }
 
     elif name == "scan_acciojob_portal":
@@ -1073,7 +1162,6 @@ async def execute_tool(
         target_job = jobs[0]
         from gcc_job_radar.resume_tailor_bridge import tailor_resume_for_job
         from gcc_job_radar.models import JobPosting, ATSProvider
-        import asyncio
 
         prov_str = str(target_job.get("provider", "custom")).lower()
         prov_enum = ATSProvider.CUSTOM
@@ -1243,6 +1331,60 @@ def format_tool_result_summary(name: str, result: dict[str, Any]) -> str:
         lines.append("• <b>Reach out on LinkedIn</b> — Send a polite check-in to recruiters or engineering managers.")
         lines.append("• <b>Update Tracker</b> — Log your contact touchpoint with <code>/apply &lt;id&gt; -n \"Followed up\"</code>.")
         return "\n".join(lines)
+
+    if name == "check_email_rejections":
+        accounts = result.get("accounts_checked", [])
+        recent_30d = result.get("rejections_last_30_days", [])
+        older_rejs = result.get("earlier_rejections", [])
+        interviews = result.get("interviews_or_oa", [])
+        days = result.get("days_scanned", 90)
+        total_rejs = result.get("total_rejections_count", len(recent_30d) + len(older_rejs))
+
+        acc_str = ", ".join(f"<code>{html.escape(str(a))}</code>" for a in accounts)
+        if total_rejs == 0 and not interviews:
+            return (
+                f"📬 <b>Application Status &amp; Rejection Scan ({days} Days)</b>\n\n"
+                f"Scanned {len(accounts)} account(s): {acc_str}\n\n"
+                f"• No rejection notices found in the last {days} days."
+            )
+
+        lines = [
+            f"📬 <b>Email Rejection &amp; Status Scan Summary</b>\n",
+            f"• <b>Accounts Scanned ({len(accounts)}):</b> {acc_str}",
+            f"• <b>Rejections (Last 30 Days):</b> <b>{len(recent_30d)}</b>",
+            f"• <b>Total Rejections (Last {days} Days):</b> <b>{total_rejs}</b>",
+        ]
+        if interviews:
+            lines.append(f"• <b>OA / Interview Invites Found:</b> <b>{len(interviews)}</b>")
+
+        if recent_30d:
+            lines.append(f"\n❌ <b>Recent Rejections (Last 30 Days — {len(recent_30d)}):</b>")
+            for idx, r in enumerate(recent_30d, 1):
+                comp = html.escape(str(r.get("company", "Unknown")))
+                role = html.escape(str(r.get("role", "Application")))
+                dt = html.escape(str(r.get("date", "Recent")))
+                acc = html.escape(str(r.get("account", "")))
+                lines.append(f"{idx}. <b>{comp}</b> — {role} <i>({dt} • {acc})</i>")
+
+        if older_rejs:
+            lines.append(f"\n📁 <b>Earlier Rejections (31–{days} Days Ago — {len(older_rejs)}):</b>")
+            for idx, r in enumerate(older_rejs, 1):
+                comp = html.escape(str(r.get("company", "Unknown")))
+                role = html.escape(str(r.get("role", "Application")))
+                dt = html.escape(str(r.get("date", "Recent")))
+                acc = html.escape(str(r.get("account", "")))
+                lines.append(f"{idx}. <b>{comp}</b> — {role} <i>({dt} • {acc})</i>")
+
+        if interviews:
+            lines.append(f"\n🎯 <b>Interviews / Online Assessments ({len(interviews)}):</b>")
+            for r in interviews:
+                comp = html.escape(str(r.get("company", "Unknown")))
+                role = html.escape(str(r.get("role", "Application")))
+                st = html.escape(str(r.get("status", "INTERVIEW")))
+                dt = html.escape(str(r.get("date", "Recent")))
+                lines.append(f"• <b>{comp}</b> — {role} [<code>{st}</code>] <i>({dt})</i>")
+
+        return "\n".join(lines).strip()
 
     if name == "sync_email_jobs":
         jobs = result.get("jobs", [])
@@ -1691,6 +1833,19 @@ async def _fallback_response(
                 "Run <code>/scan</code> to initiate a fresh scan across 4,800+ GCC career portals!"
             )
 
+    # 0d0. Email rejections & application status scan intent
+    is_rejection_query = any(
+        phrase in q
+        for phrase in [
+            "rejection", "rejections", "rejected", "declined", "not selected",
+            "application status", "reverts", "email revert", "email reverts",
+            "how many rejection", "how many rejected", "rejected from",
+        ]
+    )
+    if is_rejection_query:
+        res = await execute_tool("check_email_rejections", {"days": 90}, db_path=db_path)
+        return format_tool_result_summary("check_email_rejections", res)
+
     # 0d. Email accounts scan intent (e.g. "go through all 3 email accounts", "check my emails", "scan email accounts", "check email for jobs")
     is_email_query = (
         any(phrase in q for phrase in [
@@ -1957,6 +2112,7 @@ async def _fallback_response(
             "• **Stale Applications** — e.g. \"Summarize my stale applications\"\n"
             "• **Weekly Priorities** — e.g. \"What should I prioritize this week?\"\n"
             "• **Email Alert Sync** — e.g. \"Go through all 3 email accounts for jobs\"\n"
+            "• **Rejection Scan** — e.g. \"Check all emails for rejections\"\n"
             "• **Resume Tailoring** — e.g. \"Tailor resume for Celonis\""
         )
     return (
@@ -1968,6 +2124,7 @@ async def _fallback_response(
         "• <b>Stale Applications</b> — e.g. \"Summarize my stale applications\"\n"
         "• <b>Weekly Priorities</b> — e.g. \"What should I prioritize this week?\"\n"
         "• <b>Email Alert Sync</b> — e.g. \"Go through all 3 email accounts for jobs\"\n"
+        "• <b>Rejection Scan</b> — e.g. \"Check all emails for rejections\"\n"
         "• <b>Resume Tailoring</b> — e.g. \"Tailor resume for Celonis\""
     )
 
@@ -2184,15 +2341,16 @@ async def _call_openai_compatible(
                 else res
             )
             res_str = json.dumps(llm_res)
-            # Ensure tool result does not blow TPM budget (cap at 2200 chars)
-            if len(res_str) > 2200:
+            max_chars = 6000 if fn_name == "check_email_rejections" else 2200
+            # Ensure tool result does not blow TPM budget
+            if len(res_str) > max_chars:
                 if isinstance(llm_res, dict) and "jobs" in llm_res and len(llm_res["jobs"]) > 6:
                     llm_res = dict(llm_res)
                     llm_res["jobs"] = llm_res["jobs"][:6]
                     llm_res["note"] = "Results capped to 6 for token budget."
                     res_str = json.dumps(llm_res)
-                if len(res_str) > 2200:
-                    res_str = res_str[:2150] + '..."}'
+                if len(res_str) > max_chars:
+                    res_str = res_str[: max_chars - 50] + '..."}'
 
             messages.append({
                 "role": "tool",

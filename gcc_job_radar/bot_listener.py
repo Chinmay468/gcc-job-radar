@@ -1036,6 +1036,37 @@ async def handle_command(
                 pass
         await send_telegram_reply(bot_token, chat_id, reply, client)
 
+    elif cmd in ("/rejections", "/rejected", "/reverts"):
+        days = 90
+        if arg and arg.strip().isdigit():
+            days = max(1, min(int(arg.strip()), 365))
+        await send_telegram_reply(
+            bot_token,
+            chat_id,
+            f"📬 <i>Scanning all configured email accounts for rejection notices and application status updates (last {days} days)...</i>",
+            client,
+        )
+        stop_typing = asyncio.Event()
+        typing_task = asyncio.create_task(
+            _keep_typing_action(bot_token, chat_id, client, stop_typing)
+        )
+        try:
+            from gcc_job_radar.ai_agent import execute_tool, format_tool_result_summary
+            res = await execute_tool("check_email_rejections", {"days": days}, db_path=db_path)
+            reply = format_tool_result_summary("check_email_rejections", res)
+        except Exception as exc:
+            logger.exception("Error scanning email rejections")
+            clean_err = re.sub(r"\[/?(bold|dim|cyan|red)[^\]]*\]", "", str(exc))
+            reply = f"❌ Error scanning email rejections: {html.escape(clean_err)}"
+        finally:
+            stop_typing.set()
+            typing_task.cancel()
+            try:
+                await typing_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        await send_telegram_reply(bot_token, chat_id, reply, client)
+
     elif cmd in ("/accio", "/acciojob"):
         await send_telegram_chat_action(bot_token, chat_id, client, "typing")
         if arg:

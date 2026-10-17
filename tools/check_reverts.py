@@ -1,22 +1,32 @@
-import os
-import imaplib
-import email
 import argparse
 from datetime import datetime, timedelta
+import email
+import imaplib
+import os
 from pathlib import Path
 import sqlite3
+import sys
 from typing import Optional
 
 from dotenv import load_dotenv
 
+# Ensure project root is in sys.path when invoked directly
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 # Load environment variables
-load_dotenv()
+load_dotenv(dotenv_path=ROOT_DIR / ".env")
 
-# Local imports from the main package
-from gcc_job_radar.email_revert_detector import process_email_record, RevertMatch, RevertType
-from gcc_job_radar.notifier import send_telegram_notification
 from gcc_job_radar.db import get_db_path, init_db, mark_job_status, record_dispatched_alerts
-
+from gcc_job_radar.email_revert_detector import (
+    RevertMatch,
+    RevertType,
+    extract_clean_email_body,
+    process_email_record,
+    scan_email_reverts,
+)
+from gcc_job_radar.notifier import send_telegram_notification
 
 
 def _parse_email_message(msg_bytes: bytes) -> dict:
@@ -28,26 +38,12 @@ def _parse_email_message(msg_bytes: bytes) -> dict:
     subject = msg.get("Subject", "")
     sender = msg.get("From", "")
     date = msg.get("Date", "")
-
-    # Prefer plain‑text part
-    body = ""
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == "text/plain" and not part.get("Content-Disposition"):
-                charset = part.get_content_charset() or "utf-8"
-                body = part.get_payload(decode=True).decode(charset, errors="ignore")
-                break
-    else:
-        charset = msg.get_content_charset() or "utf-8"
-        body = msg.get_payload(decode=True).decode(charset, errors="ignore")
+    body = extract_clean_email_body(msg)
     return {"subject": subject, "sender": sender, "date": date, "body": body}
 
 
 def _store_seen_email(uid: str, db_path: Optional[Path] = None) -> None:
-    """Record a processed email UID in the ``seen_emails`` table.
-
-    The table is created lazily by ``init_db`` if it does not exist.
-    """
+    """Record a processed email UID in the ``seen_emails`` table."""
     init_db(db_path)
     target = get_db_path(db_path)
     with sqlite3.connect(target) as conn:
@@ -68,17 +64,13 @@ def _has_seen_email(uid: str, db_path: Optional[Path] = None) -> bool:
 
 
 def _send_revert_alert(match: RevertMatch) -> None:
-    """Send a Telegram alert for important revert types.
-
-    Only ``INTERVIEW`` and ``OA_INVITE`` generate a notification.
-    """
+    """Send a Telegram alert for important revert types."""
     if match.revert_type in {RevertType.INTERVIEW, RevertType.OA_INVITE}:
         message = (
             f"*{match.revert_type.value}* detected from *{match.sender}* for *{match.company}*\n"
             f"Subject: {match.subject}\nSnippet: {match.snippet}"
         )
         send_telegram_notification(message)
-        # ``record_dispatched_alerts`` expects a job_id; it may be ``None``.
         record_dispatched_alerts(
             job_id=str(match.matched_job_id) if match.matched_job_id else None,
             platform="telegram",
@@ -101,86 +93,25 @@ def _update_job_status(match: RevertMatch, db_path: Optional[Path] = None) -> No
 
 
 def run_check_reverts(
-    days: int = 1,
+    days: int = 90,
     dry_run: bool = False,
     notify: bool = True,
     db_path: Optional[Path] = None,
-) -> None:
-    """Core routine that scans Gmail for recruiter replies and synchronises state.
-
-    Parameters
-    ----------
-    days:
-        How many days back to search for messages.
-    dry_run:
-        When ``True`` no database writes or Telegram notifications are performed.
-    notify:
-        Whether to send Telegram alerts for ``INTERVIEW`` / ``OA_INVITE``.
-    db_path:
-        Optional custom path to the SQLite database.
-    """
-    try:
-        from tools.ingest_email import get_configured_email_accounts
-        accounts = get_configured_email_accounts()
-    except Exception:
-        user = os.getenv("GMAIL_USER") or os.getenv("EMAIL_USER")
-        password = os.getenv("GMAIL_APP_PASSWORD") or os.getenv("EMAIL_PASSWORD")
-        accounts = [(user, password)] if (user and password) else []
-
-    if not accounts:
-        raise EnvironmentError("No email credentials configured in environment or .env (set EMAIL_USER/EMAIL_PASSWORD)")
-
-    for user, password in accounts:
-        try:
-            imap = imaplib.IMAP4_SSL("imap.gmail.com")
-            imap.login(user, password)
-            imap.select("INBOX")
-            since = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
-            status, data = imap.search(None, f"(SINCE \"{since}\")")
-            if status != "OK":
-                imap.logout()
-                continue
-
-            uids = data[0].split()
-            print(f"[*] Scanning {len(uids)} email(s) from {user} in last {days} days for application reverts...")
-            for uid_bytes in uids:
-                uid = f"{user}:{uid_bytes.decode()}"
-                if _has_seen_email(uid, db_path):
-                    continue
-                fetch_status, msg_data = imap.fetch(uid_bytes.decode(), "(RFC822)")
-                if fetch_status != "OK" or not msg_data:
-                    continue
-                raw_msg = msg_data[0][1]
-                if not isinstance(raw_msg, (bytes, bytearray)):
-                    continue
-                email_parts = _parse_email_message(raw_msg)
-                match = process_email_record(
-                    uid=uid,
-                    subject=email_parts["subject"],
-                    sender=email_parts["sender"],
-                    date=email_parts["date"],
-                    body=email_parts["body"],
-                    db_path=db_path,
-                )
-                if not match:
-                    if not dry_run:
-                        _store_seen_email(uid, db_path)
-                    continue
-                print(f"  [+] Match found ({match.revert_type.value}): {match.company} - {match.subject}")
-                if not dry_run:
-                    _update_job_status(match, db_path)
-                    _store_seen_email(uid, db_path)
-                    if notify:
-                        _send_revert_alert(match)
-            imap.logout()
-        except Exception as exc:
-            print(f"[-] Error scanning mailbox {user}: {exc}")
-
+) -> dict:
+    """Scan configured email accounts for recruiter replies and rejections."""
+    res = scan_email_reverts(days=days, update_db=not dry_run, db_path=db_path)
+    print(
+        f"[*] Scanned {len(res['accounts_checked'])} account(s) over last {days} days: "
+        f"{res['total_rejections']} rejection(s) across {res['unique_rejected_companies_count']} company/companies."
+    )
+    for idx, r in enumerate(res["rejections"], 1):
+        print(f"  {idx:2d}. [{r['date']}] {r['company']} — {r['role']} ({r['account']})")
+    return res
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Detect recruiter email reverts and sync job status")
-    parser.add_argument("--days", type=int, default=1, help="Number of days back to scan")
+    parser.add_argument("--days", type=int, default=90, help="Number of days back to scan (default: 90)")
     parser.add_argument("--dry-run", action="store_true", help="Do not modify DB or send alerts")
     parser.add_argument("--no-notify", dest="notify", action="store_false", help="Suppress Telegram alerts")
     parser.add_argument("--db-path", type=str, default=None, help="Custom SQLite DB path")

@@ -101,6 +101,12 @@
       "company": "Duck Creek",
       "title": "All Roles",
       "apply_url": "https://www.google.com/search?q=Duck+Creek+All+Roles+careers"
+    },
+    {
+      "id": "email_alert_bending spoons_email_linkedin_4464197076",
+      "company": "Bending Spoons",
+      "title": "Graduate software engineer",
+      "apply_url": "https://www.linkedin.com/jobs/view/4464197076/"
     }
   ],
   "dismissed_companies": [
@@ -110,6 +116,7 @@
     "Dunbar",
     "Boardman (UK)",
     "Dunbar & Boardman (UK)",
-    "Duck Creek"
+    "Duck Creek",
+    "Bending Spoons"
   ]
 }
