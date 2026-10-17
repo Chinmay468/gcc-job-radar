@@ -1674,6 +1674,20 @@ async def dispatch_single_update(
                     )
                     return
 
+            # Fast-path 5: Natural language email rejection / application revert scan
+            from gcc_job_radar.ai_agent import extract_days_from_query, is_rejection_status_query
+            if is_rejection_status_query(raw_msg):
+                days_val = extract_days_from_query(raw_msg, default=90)
+                await handle_command(
+                    command_text=f"/rejections {days_val}",
+                    chat_id=chat_id,
+                    bot_token=bot_token,
+                    allowed_chat_id=allowed_chat_id,
+                    client=client,
+                    db_path=db_path,
+                )
+                return
+
             logger.info("AI Query: %s from chat_id %s", raw_msg, chat_id)
             try:
                 console.print(f"[green]AI Query:[/green] [bold]{raw_msg}[/bold] from chat_id [yellow]{chat_id}[/yellow]")

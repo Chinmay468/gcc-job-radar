@@ -1075,13 +1075,30 @@ async def execute_tool(
         )
         accounts = scan_res.get("accounts_checked", [])
         reverts = scan_res.get("reverts", [])
-        rejections = [r for r in reverts if r.get("status") == "REJECTED"]
-        interviews = [r for r in reverts if r.get("status") in ("INTERVIEW", "OA_INVITE")]
+        rejections = scan_res.get("rejections")
+        if rejections is None:
+            rejections = [r for r in reverts if r.get("status") == "REJECTED"]
+        interviews = scan_res.get("interviews_and_oas")
+        if interviews is None:
+            interviews = [r for r in reverts if r.get("status") in ("INTERVIEW", "OA_INVITE")]
         acknowledged = [r for r in reverts if r.get("status") == "ACKNOWLEDGED"]
 
         cutoff_30d = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
-        recent_30d = [r for r in rejections if (r.get("date") or "") >= cutoff_30d]
-        older_rejs = [r for r in rejections if (r.get("date") or "") < cutoff_30d]
+
+        def _get_iso(r: dict[str, Any]) -> str:
+            iso = str(r.get("iso_date") or "")
+            if iso:
+                return iso
+            d_str = str(r.get("date") or "")
+            if re.match(r"^\d{4}-\d{2}-\d{2}", d_str):
+                return d_str[:10]
+            try:
+                return datetime.strptime(d_str, "%d %b %Y").strftime("%Y-%m-%d")
+            except Exception:
+                return ""
+
+        recent_30d = [r for r in rejections if _get_iso(r) >= cutoff_30d]
+        older_rejs = [r for r in rejections if _get_iso(r) < cutoff_30d]
 
         def _fmt_item(r: dict[str, Any]) -> dict[str, str]:
             return {
@@ -1097,7 +1114,7 @@ async def execute_tool(
             {
                 "company": str(r.get("company") or "Unknown"),
                 "role": str(r.get("role") or "Application"),
-                "status": str(r.get("status") or "INTERVIEW"),
+                "status": str(r.get("status") or r.get("type") or "INTERVIEW"),
                 "date": str(r.get("date") or "Recent"),
                 "account": str(r.get("account") or ""),
             }
@@ -2416,6 +2433,45 @@ async def _call_openai(
 # Public Interface
 
 
+def extract_days_from_query(query: str, default: int = 90) -> int:
+    """Parse natural language timeframe (e.g. 'past 3 months', 'last 30 days', '2 weeks') into days."""
+    q = (query or "").lower()
+    m_months = re.search(r"\b(\d+)\s*months?\b", q)
+    if m_months:
+        return max(1, min(int(m_months.group(1)) * 30, 365))
+    if re.search(r"\b(?:past|last|this)\s+month\b", q):
+        return 30
+    m_weeks = re.search(r"\b(\d+)\s*weeks?\b", q)
+    if m_weeks:
+        return max(1, min(int(m_weeks.group(1)) * 7, 365))
+    if re.search(r"\b(?:past|last|this)\s+week\b", q):
+        return 7
+    m_days = re.search(r"\b(\d+)\s*days?\b", q)
+    if m_days:
+        return max(1, min(int(m_days.group(1)), 365))
+    return default
+
+
+def is_rejection_status_query(query: str) -> bool:
+    """Return True if the user is asking to scan/count email rejections or application reverts."""
+    q = (query or "").lower().strip()
+    return any(
+        phrase in q
+        for phrase in [
+            "rejection",
+            "rejections",
+            "rejected",
+            "declined",
+            "not selected",
+            "email revert",
+            "email reverts",
+            "how many rejection",
+            "how many rejected",
+            "rejected from",
+        ]
+    )
+
+
 async def ask_ai_agent(
     prompt: str,
     chat_id: str | int = "cli",
@@ -2431,6 +2487,16 @@ async def ask_ai_agent(
     3. Tertiary: OpenAI (if OPENAI_API_KEY is configured).
     4. Local Fallback: Rule-based deterministic NLP engine.
     """
+    # Deterministic fast-path for email rejection / application revert queries
+    # Ensures we never accidentally invoke sync_email_jobs or drop rejection items via LLM truncation.
+    if is_rejection_status_query(prompt):
+        days = extract_days_from_query(prompt, default=90)
+        res = await execute_tool("check_email_rejections", {"days": days}, db_path=db_path)
+        reply = format_tool_result_summary("check_email_rejections", res)
+        _chat_manager.add_turn(chat_id, "user", prompt)
+        _chat_manager.add_turn(chat_id, "assistant", reply)
+        return reply
+
     history = _chat_manager.get_history(chat_id)
 
     gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")

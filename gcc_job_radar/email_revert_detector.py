@@ -584,18 +584,27 @@ def extract_company_and_role(subject: str, sender: str, body: str) -> Tuple[str,
                 cand_r = re.sub(r"(?i)^the\s+position\s+of\s+", "", cand_r).strip()
                 if (
                     2 < len(cand_r) < 90
-                    and not cand_r.lower().startswith(("joining", "employment", "a career", "this job"))
+                    and cand_r.lower() not in ("the", "working", "our", "your", "this", "joining", "employment", "application")
+                    and not cand_r.lower().startswith(("joining", "employment", "a career", "this job", "working at", "working with", "the "))
                     and "encourage you" not in cand_r.lower()
                 ):
                     role = cand_r
                     break
 
     role = re.sub(r"(?i)^the\s+position\s+of\s+", "", role).strip()
+    if role.lower() in ("the", "working", "our", "your", "this", "joining", "employment"):
+        role = ""
     return company, role
 
 
-def correlate_revert_to_job(conn: sqlite3.Connection, company_hint: str, sender: str) -> Optional[int]:
-    applied = get_applied_jobs()
+def correlate_revert_to_job(
+    conn: Optional[sqlite3.Connection],
+    company_hint: str,
+    sender: str,
+    applied_jobs: Optional[list[dict[str, Any]]] = None,
+    db_path: Optional[Path] = None,
+) -> Optional[int]:
+    applied = applied_jobs if applied_jobs is not None else get_applied_jobs(db_path=db_path)
     hint = company_hint.strip().lower()
     best_id = None
     best_score = 0.0
@@ -627,17 +636,14 @@ def process_email_record(
     body: str,
     db_path: Optional[Path] = None,
     account: str = "",
+    applied_jobs: Optional[list[dict[str, Any]]] = None,
 ) -> Optional[RevertMatch]:
     rtype, snippet = classify_email_content(subject, sender, body)
     if rtype is RevertType.UNKNOWN:
         return None
     company, role = extract_company_and_role(subject, sender, body)
     hint = company if company and company != "Unknown Company" else (subject or sender)
-    conn = sqlite3.connect(get_db_path(db_path))
-    try:
-        match_id = correlate_revert_to_job(conn, hint, sender)
-    finally:
-        conn.close()
+    match_id = correlate_revert_to_job(None, hint, sender, applied_jobs=applied_jobs, db_path=db_path)
     return RevertMatch(
         company=hint,
         revert_type=rtype,
@@ -657,6 +663,8 @@ def _is_candidate_status_header(subject: str, sender: str) -> bool:
         return False
     sl = (subject or "").lower()
     fl = (sender or "").lower()
+    if "jecrc-it-" in fl or "tpo it jecrc" in fl or "unstop" in fl:
+        return False
     keywords = (
         "application",
         "applied",
@@ -705,6 +713,7 @@ def _scan_single_mailbox(
     acc_pass: str,
     since_str: str,
     db_path: Optional[Path] = None,
+    applied_jobs: Optional[list[dict[str, Any]]] = None,
 ) -> list[RevertMatch]:
     """Scan a single IMAP mailbox for application status reverts since `since_str`."""
     matches: list[RevertMatch] = []
@@ -781,6 +790,7 @@ def _scan_single_mailbox(
                     body=body_text,
                     db_path=db_path,
                     account=acc_user,
+                    applied_jobs=applied_jobs,
                 )
                 if match:
                     matches.append(match)
@@ -815,6 +825,16 @@ def _format_short_date(date_str: str) -> str:
         return date_str[:16] if date_str else "Recent"
 
 
+def _format_iso_date(date_str: str) -> str:
+    try:
+        dt = parsedate_to_datetime(date_str)
+        return dt.strftime("%Y-%m-%d")
+    except Exception:
+        if re.match(r"^\d{4}-\d{2}-\d{2}", str(date_str or "")):
+            return str(date_str)[:10]
+        return ""
+
+
 def scan_email_reverts(
     days: int = 90,
     update_db: bool = True,
@@ -824,6 +844,7 @@ def scan_email_reverts(
     from tools.ingest_email import format_imap_date, get_configured_email_accounts
 
     init_db(db_path)
+    applied_jobs = get_applied_jobs(db_path=db_path)
     accounts = get_configured_email_accounts()
     since_dt = datetime.now(timezone.utc) - timedelta(days=max(1, days))
     since_str = format_imap_date(since_dt)
@@ -831,7 +852,7 @@ def scan_email_reverts(
     all_matches: list[RevertMatch] = []
     with ThreadPoolExecutor(max_workers=max(1, len(accounts))) as pool:
         futures = {
-            pool.submit(_scan_single_mailbox, acc_user, acc_pass, since_str, db_path): acc_user
+            pool.submit(_scan_single_mailbox, acc_user, acc_pass, since_str, db_path, applied_jobs): acc_user
             for acc_user, acc_pass in accounts
         }
         for fut in as_completed(futures):
@@ -846,6 +867,7 @@ def scan_email_reverts(
     # Deduplicate identical (company, role/subject, revert_type, short_date) entries
     deduped: list[RevertMatch] = []
     seen_keys: set[tuple[str, str, str, str]] = set()
+    db_updates: list[int] = []
     for m in all_matches:
         short_d = _format_short_date(m.date)
         role_or_subj = (m.role or m.subject).lower().strip()
@@ -858,15 +880,19 @@ def scan_email_reverts(
         if update_db and m.matched_job_id:
             if m.revert_type == RevertType.REJECTED:
                 mark_job_status(m.matched_job_id, "REJECTED", notes=f"Rejection email received ({short_d})", db_path=db_path)
+                db_updates.append(m.matched_job_id)
             elif m.revert_type in (RevertType.INTERVIEW, RevertType.OA_INVITE):
                 mark_job_status(m.matched_job_id, "INTERVIEWING", notes=f"{m.revert_type.value} email received ({short_d})", db_path=db_path)
+                db_updates.append(m.matched_job_id)
 
     rejections = [
         {
+            "status": "REJECTED",
             "company": m.company,
             "role": m.role or m.subject,
             "subject": m.subject,
             "date": _format_short_date(m.date),
+            "iso_date": _format_iso_date(m.date),
             "account": m.account,
             "snippet": m.snippet[:160],
             "matched_job_id": m.matched_job_id,
@@ -877,15 +903,31 @@ def scan_email_reverts(
 
     interviews = [
         {
+            "status": m.revert_type.value,
             "company": m.company,
             "role": m.role or m.subject,
             "subject": m.subject,
             "date": _format_short_date(m.date),
+            "iso_date": _format_iso_date(m.date),
             "account": m.account,
             "type": m.revert_type.value,
         }
         for m in deduped
         if m.revert_type in (RevertType.INTERVIEW, RevertType.OA_INVITE)
+    ]
+
+    acknowledged = [
+        {
+            "status": "ACKNOWLEDGED",
+            "company": m.company,
+            "role": m.role or m.subject,
+            "subject": m.subject,
+            "date": _format_short_date(m.date),
+            "iso_date": _format_iso_date(m.date),
+            "account": m.account,
+        }
+        for m in deduped
+        if m.revert_type == RevertType.ACKNOWLEDGED
     ]
 
     unique_rejected_companies = sorted({r["company"] for r in rejections}, key=lambda x: x.lower())
@@ -900,4 +942,6 @@ def scan_email_reverts(
         "rejections": rejections,
         "interviews_and_oas_count": len(interviews),
         "interviews_and_oas": interviews,
+        "reverts": rejections + interviews + acknowledged,
+        "db_updates": db_updates,
     }
