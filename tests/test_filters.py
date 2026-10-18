@@ -202,10 +202,11 @@ def test_matches_target_title_negative(title: str) -> None:
         ("minimum 4 years of experience", True),
         ("at least 3 years of experience", True),
         ("experience: 5+ yrs", True),
-        ("1-3 years of hands-on software engineering experience", False),
+        ("1-3 years of hands-on software engineering experience", True),
+        ("1-2 years of experience", True),
         ("0-2 years of experience", False),
         ("0-1 years of experience", False),
-        ("1+ years of experience", False),
+        ("1+ years of experience", True),
         ("Freshers and 2024/2025 graduates welcome", False),
         ("BS in Computer Science or equivalent practical experience", False),
         ("<p>• 4+ years of experience (technology industry preferred)</p>", True),
@@ -219,7 +220,7 @@ def test_matches_target_title_negative(title: str) -> None:
     ],
 )
 def test_requires_experienced_candidate(content: str, expected: bool) -> None:
-    """Verify that roles requiring >= 3 years experience are disqualified while freshers pass."""
+    """Verify that roles requiring >= 1 year experience (not starting from 0) are disqualified while freshers pass."""
     from gcc_job_radar.filters import requires_experienced_candidate
     assert requires_experienced_candidate(content) is expected
 
@@ -305,28 +306,29 @@ def test_is_potential_india_location_fast_short_circuit() -> None:
 @pytest.mark.parametrize(
     "content,expected",
     [
-        # Fractional range: min ≥ 2.5 → reject
+        # Experienced ranges (min >= 1.0 yr, does not start from 0) → reject
         ("Experience: 2.6 – 5 Years", True),
         ("Experience: 2.5 - 4 years", True),
         ("Experience: 3.0 to 6 years", True),
-        # Fractional range: min < 2.5 → accept
-        ("Experience: 0 – 2 Years", False),
-        ("Experience: 1 - 2 years", False),
-        ("0 to 2 years of experience", False),
-        # N+ pattern: N ≥ 2.5 → reject
+        ("Experience: 1 - 2 years", True),
+        ("1+ years of experience", True),
+        ("2 years experience", True),
+        ("minimum 1 year of experience", True),
+        ("min 2.5 years", True),
+        ("minimum 3 years of experience", True),
         ("2.5+ years experience", True),
         ("3+ years of experience", True),
-        # N+ pattern: N < 2.5 → accept
-        ("1+ years of experience", False),
-        ("2 years experience", False),
-        # Minimum pattern: min ≥ 2.5 → reject
-        ("minimum 3 years of experience", True),
-        ("min 2.5 years", True),
-        # Minimum pattern: min < 2.5 → accept
-        ("minimum 1 year of experience", False),
-        # No experience context
+        # Ranges starting strictly from 0 → accept
+        ("Experience: 0 – 2 Years", False),
+        ("0 to 2 years of experience", False),
+        ("0-1 years of experience", False),
+        ("0-3 years of experience", False),
+        ("0+ years of experience", False),
         ("Freshers eligible", False),
         ("Entry-level role, 0–1 year preferred", False),
+        # 1-2 YOE with explicit 2027 / fresher override → accept
+        ("Experience: 1 - 2 years | 2027 batch graduates welcome", False),
+        ("1-2 years of experience preferred, freshers are welcome", False),
     ],
 )
 def test_requires_experienced_candidate_fractional(content: str, expected: bool) -> None:
@@ -341,14 +343,17 @@ def test_requires_experienced_candidate_fractional(content: str, expected: bool)
         # Generic title + snippet rejecting: should be disqualified
         ("Full Stack Developer", "Experience: 2.6 – 5 Years | Bengaluru", False),
         ("Software Engineer", "3+ years of experience required", False),
+        ("Software Engineer", "Experience: 1 - 2 years", False),
         # Generic title + snippet accepting: should qualify
         ("Full Stack Developer", "0 – 2 Years | Freshers welcome", True),
         ("Software Engineer", "Freshers are eligible | 2025 batch welcome", True),
         # Title-only card (no snippet): falls back to title heuristics
         ("Software Engineer I", None, True),
         ("Senior Software Engineer", None, False),
-        # Entry-level title overrides snippet ambiguity
-        ("Software Engineer Trainee", "Experience: 2 - 3 years", True),  # title wins as entry
+        # Entry-level title with valid 0-start snippet
+        ("Software Engineer Trainee", "Experience: 0 - 2 years", True),
+        # Entry-level title with 1-2 years (does not start from 0) -> disqualified
+        ("Software Engineer Trainee", "Experience: 1 - 2 years", False),
     ],
 )
 def test_is_entry_level_with_snippet(title: str, snippet: Optional[str], expected: bool) -> None:

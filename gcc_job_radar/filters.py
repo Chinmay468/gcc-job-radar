@@ -108,32 +108,33 @@ def is_tech_role(title: str, department: str = "") -> bool:
         return bool(_TECH_DISCIPLINE_PATTERN.search(text))
     return bool(_TECH_ROLE_PATTERN.search(text))
 
-# Disqualify roles requiring 3+ or more years of experience or experienced mid-level ranges (e.g. 2-4+ yrs)
+# Disqualify roles requiring prior experience (>= 1 year) that do NOT start from 0
 EXPERIENCE_DISQUALIFY_PATTERN: re.Pattern[str] = re.compile(
     r"""
     (?ix)
     \b(?:
-        2\s*(?:-|–|—|to)\s*(?:[4-9]|\d{2,})\+?\s*(?:years?|yrs?)(?:\s+of)?(?:\s+(?:relevant|hands[- ]on|work|professional|industry|technical|software|engineering|coding|\w+)){0,3}\s+experience |
-        (?:[3-9]|\d{2,})\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?)(?:\s+of)?(?:\s+(?:relevant|hands[- ]on|work|professional|industry|technical|software|engineering|coding|\w+)){0,3}\s+experience |
-        (?:minimum|at\s+least)\s+(?:of\s+)?(?:[3-9]|\d{2,})\s*(?:years?|yrs?)(?:\s+of)?(?:\s+\w+){0,3}\s+experience |
-        experience\s*:\s*(?:[3-9]|\d{2,})\+?\s*(?:years?|yrs?) |
-        (?:[3-9]|\d{2,})\s*(?:to|-|–|—)\s*\d+\s*(?:years?|yrs?)(?:\s+of)?(?:\s+\w+){0,3}\s+experience
+        (?:[1-9]|\d{2,})\s*(?:-|–|—|to)\s*(?:[1-9]|\d{2,})\+?\s*(?:years?|yrs?|yoe)(?:\s+of)?(?:\s+(?:relevant|hands[- ]on|work|professional|industry|technical|software|engineering|coding|\w+)){0,3}\s+experience |
+        (?:[1-9]|\d{2,})\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?|yoe)(?:\s+of)?(?:\s+(?:relevant|hands[- ]on|work|professional|industry|technical|software|engineering|coding|\w+)){0,3}\s+experience |
+        (?:minimum|at\s+least)\s+(?:of\s+)?(?:[1-9]|\d{2,})\s*(?:years?|yrs?|yoe)(?:\s+of)?(?:\s+\w+){0,3}\s+experience |
+        experience\s*:\s*(?:[1-9]|\d{2,})\+?\s*(?:years?|yrs?|yoe) |
+        (?:[1-9]|\d{2,})\s*(?:to|-|–|—)\s*\d+\s*(?:years?|yrs?|yoe)(?:\s+of)?(?:\s+\w+){0,3}\s+experience |
+        (?:requires?|must\s+have)\s+(?:[1-9]|\d{2,})\+?\s*(?:years?|yrs?|yoe)(?:\s+of)?(?:\s+\w+){0,3}\s+experience
     )\b
     """,
     re.VERBOSE | re.IGNORECASE,
 )
 
-# Explicit exclusion of past graduation batches when role restricts to earlier passouts (2020-2025 only)
+# Explicit exclusion of past graduation batches when role restricts to earlier passouts (2020-2026 without 2027)
 PAST_BATCH_EXCLUSION_PATTERN: re.Pattern[str] = re.compile(
     r"""
     (?ix)
     \b(?:
-        (?:only\s+for\s+)?(?:202[0-5]|2025|2024|2023)\s*(?:batch|pass[- ]?outs?|graduates?)\s+only |
-        (?:202[0-5]|2025|2024|2023)\s*(?:batch|pass[- ]?outs?)\s+(?:only|eligible) |
-        batches?\s+(?:eligible\s*:\s*)?(?:202[0-5]|2024|2025)\b(?!\s*[,-/&]\s*2027) |
-        (?:must\s+have\s+)?graduated\s+in\s+(?:202[0-5]|2024|2025)\b |
-        (?:must\s+have\s+)?completed\s+(?:graduation|degree)\s+(?:in|by)\s+(?:202[0-5]|2024|2025)\b |
-        (?:candidates?\s+from\s+)?(?:202[0-5]|2024|2025)\s+(?:batch\s+only|passouts?\s+only)
+        (?:only\s+for\s+)?(?:202[0-6]|2026|2025|2024|2023)\s*(?:batch|pass[- ]?outs?|graduates?)\s+only |
+        (?:202[0-6]|2026|2025|2024|2023)\s*(?:batch|pass[- ]?outs?)\s+(?:only|eligible) |
+        batches?\s*(?:eligible)?\s*[:=-]?\s*(?:202[0-6]|2024|2025|2026)(?:\s*[,-/&|]\s*202[0-6])*\b(?!\s*[,-/&|]\s*2027) |
+        (?:must\s+have\s+)?graduated\s+in\s+(?:202[0-6]|2024|2025|2026)\b(?!\s*[,-/&|]\s*2027) |
+        (?:must\s+have\s+)?completed\s+(?:graduation|degree)\s+(?:in|by)\s+(?:202[0-6]|2024|2025|2026)\b(?!\s*[,-/&|]\s*2027) |
+        (?:candidates?\s+from\s+)?(?:202[0-6]|2024|2025|2026)\s+(?:batch\s+only|passouts?\s+only)
     )\b
     """,
     re.VERBOSE | re.IGNORECASE,
@@ -173,10 +174,10 @@ IMMEDIATE_FULLTIME_JOIN_PATTERN: re.Pattern[str] = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
-_ENTRY_PREFIX_PATTERN = re.compile(r"(?i)[0-2]\s*(?:-|to|–|—)\s*$")
+_ENTRY_PREFIX_PATTERN = re.compile(r"(?i)\b0(?:\.0)?\s*(?:-|to|–|—)\s*$")
 _HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 
-# Disqualify roles requiring fractional/ranged experience (>= 2.5 yrs) or mid-level ranges
+# Disqualify roles requiring fractional/ranged experience (min >= 1.0 yr) or experienced ranges
 _EXPERIENCE_RANGE_PATTERN: re.Pattern[str] = re.compile(
     r"(?i)\b(\d+(?:\.\d+)?)\s*(?:-|to|–|—)\s*(\d+(?:\.\d+)?)\s*(?:\+?\s*)?(?:years?|yoe|yrs?)\b"
 )
@@ -189,58 +190,88 @@ _PLUS_EXPERIENCE_PATTERN: re.Pattern[str] = re.compile(
 
 
 def requires_experienced_candidate(content: str) -> bool:
-    """Check if job description demands experienced candidates (>= 2.5 years experience).
+    """Check if job description demands experienced candidates (>= 1 year experience, not starting from 0).
 
-    Returns True if description indicates candidate must have >= 2.5 years experience.
-    Genuine entry-level/fresher roles (0-1 yrs, 0-2 yrs, 1-3 yrs, degrees) return False.
+    Returns True if description indicates candidate must have prior experience (>= 1 year, e.g. 1-2 yrs, 1+ yrs).
+    Genuine entry-level/fresher roles that start from 0 (0-1 yrs, 0-2 yrs, 0-N yrs), or that explicitly welcome
+    2027 batch / new graduates / freshers, return False.
     """
     if not content or not content.strip():
         return False
     unescaped = html.unescape(content)
     clean_text = _HTML_TAG_PATTERN.sub(" ", unescaped)
 
-    # 1. Check ranged experience patterns (e.g. "2.6 – 5 Years", "3 - 6 yrs", "2 - 4 years")
+    # If the posting explicitly welcomes the 2027 batch or new graduates/freshers, it is not strictly experienced
+    explicit_fresher_override = bool(
+        re.search(
+            r"""(?ix)
+            \b(?:
+                (?:class|batch|graduating(?:\s+year)?|pass[- ]?out)\s*(?:of|in)?\s*[:=-]?\s*2027\b |
+                2027\s*(?:batch|graduates?|pass[- ]?outs?|passouts?|cohort)\b |
+                (?:new|recent|college|university)\s+graduates?\s*(?:are\s+)?(?:welcome|eligible|invited)\b |
+                freshers?\s+(?:are\s+)?(?:welcome|eligible)\b |
+                (?:no\s+prior\s+experience\s+required|0\s*(?:years?|yoe)\s+experience)
+            )\b
+            """,
+            clean_text,
+        )
+    )
+
+    is_experienced = False
+
+    # 1. Check ranged experience patterns (e.g. "1 - 2 Years", "2.6 – 5 Years", "3 - 6 yrs", "2 - 4 years")
+    # Must start from 0 (min_y == 0.0); if min_y >= 1.0, marks as experienced
     for m in _EXPERIENCE_RANGE_PATTERN.finditer(clean_text):
         try:
             min_y = float(m.group(1))
-            max_y = float(m.group(2))
-            if min_y >= 2.5:
-                return True
-            if min_y >= 2.0 and max_y >= 4.0:
-                return True
+            if min_y >= 1.0:
+                is_experienced = True
+                break
         except (ValueError, TypeError):
             pass
 
-    # 2. Check minimum experience patterns (e.g. "min 3 years", "at least 3 years", "minimum 4 years")
-    for m in _MIN_EXPERIENCE_PATTERN.finditer(clean_text):
-        try:
-            y = float(m.group(1))
-            if y >= 2.5:
-                return True
-        except (ValueError, TypeError):
-            pass
+    # 2. Check minimum experience patterns (e.g. "min 1 year", "at least 1 year", "minimum 3 years")
+    if not is_experienced:
+        for m in _MIN_EXPERIENCE_PATTERN.finditer(clean_text):
+            try:
+                y = float(m.group(1))
+                if y >= 1.0:
+                    is_experienced = True
+                    break
+            except (ValueError, TypeError):
+                pass
 
-    # 3. Check plus patterns (e.g. "3+ YOE", "3+ years", "2.5+ yrs")
-    for m in _PLUS_EXPERIENCE_PATTERN.finditer(clean_text):
-        try:
-            y = float(m.group(1))
-            if y >= 2.5:
-                start = m.start()
-                prefix = clean_text[max(0, start - 10):start]
-                if _ENTRY_PREFIX_PATTERN.search(prefix):
-                    continue
-                return True
-        except (ValueError, TypeError):
-            pass
+    # 3. Check plus patterns (e.g. "1+ YOE", "1+ years", "2+ yrs", "3+ years")
+    if not is_experienced:
+        for m in _PLUS_EXPERIENCE_PATTERN.finditer(clean_text):
+            try:
+                y = float(m.group(1))
+                if y >= 1.0:
+                    start = m.start()
+                    prefix = clean_text[max(0, start - 10):start]
+                    if _ENTRY_PREFIX_PATTERN.search(prefix):
+                        continue
+                    is_experienced = True
+                    break
+            except (ValueError, TypeError):
+                pass
 
-    # 4. Check existing comprehensive pattern
-    for m in EXPERIENCE_DISQUALIFY_PATTERN.finditer(clean_text):
-        start = m.start()
-        prefix = clean_text[max(0, start - 10):start]
-        # Ignore if part of an entry-level range like 0-3 years or 1-3 years
-        if _ENTRY_PREFIX_PATTERN.search(prefix):
-            continue
+    # 4. Check comprehensive pattern (catches 1-2 yrs, 1+ yrs, experience: 1 year, etc.)
+    if not is_experienced:
+        for m in EXPERIENCE_DISQUALIFY_PATTERN.finditer(clean_text):
+            start = m.start()
+            prefix = clean_text[max(0, start - 10):start]
+            if _ENTRY_PREFIX_PATTERN.search(prefix):
+                continue
+            is_experienced = True
+            break
+
+    if is_experienced:
+        # If explicitly welcoming 2027 batch or freshers, override the experienced flag
+        if explicit_fresher_override:
+            return False
         return True
+
     return False
 
 
@@ -317,18 +348,23 @@ FOREIGN_REMOTE_EXCLUSIONS: tuple[str, ...] = (
     "remote - latam",
 )
 
-# Positive regex check for fresher and 0-2 years of experience indicators
+# Positive regex check for fresher and 0-N years of experience indicators (must start strictly from 0)
 FRESHER_EXPERIENCE_PATTERN: re.Pattern[str] = re.compile(
     r"""
     (?ix)
     \b(
-        (?:0\s*(?:-|–|—|to)\s*[1-2]|1\s*(?:-|–|—|to)\s*2|\b0\b|\b1\b|\b2\b)\s*(?:years?|yrs?)(?:\s+of)?(?:\s+\w+){0,3}\s+experience |
-        (?:0\s*(?:-|–|—|to)\s*1|0\s*(?:-|–|—|to)\s*2|1\s*(?:-|–|—|to)\s*2)\s*(?:years?|yrs?) |
+        0\s*(?:-|–|—|to)\s*\d+\+?\s*(?:years?|yrs?|yoe)(?:\s+of)?(?:\s+\w+){0,3}\s+experience |
+        0\s*(?:-|–|—|to)\s*\d+\+?\s*(?:years?|yrs?|yoe) |
+        \b0\s*(?:years?|yrs?|yoe)\b |
+        (?:0\s*years?|no(?:\s+prior)?)\s+experience\s*(?:required|needed)? |
         freshers?\s+(?:are\s+)?(?:eligible|welcome) |
-        (?:2024|2025|2026|2027)\s+batch |
-        (?:class|graduating|pass[- ]?out)\s+of\s+(?:2024|2025|2026|2027) |
-        (?:0\s*years?|no(?:\s+prior)?)\s+experience\s+(?:required|needed) |
-        (?:0\s*yoe|1\s*yoe|2\s*yoe|0-1\s*yoe|0-2\s*yoe|1-2\s*yoe)
+        (?:new|recent|college|university)\s+graduates?\b |
+        (?:2025|2026|2027)\s+batch |
+        (?:class|graduating|pass[- ]?out)\s+of\s+(?:2025|2026|2027) |
+        pre[- ]?final\s+year | penultimate\s+year |
+        (?:3rd|third)\s+year\s+students? |
+        summer\s+202[67]\s+(?:intern|internship) |
+        0\s*yoe | 0-1\s*yoe | 0-2\s*yoe | 0-3\s*yoe
     )\b
     """,
     re.VERBOSE | re.IGNORECASE,
@@ -459,7 +495,7 @@ def matches_india_location(location: str) -> bool:
 def is_entry_level(
     job_or_title: object,
     content: str = "",
-    target_grad_year: Optional[int] = None,
+    target_grad_year: Optional[int] = 2027,
 ) -> bool:
     """Check if a job role targets freshers / entry-level / 0-2 YOE candidates.
 
