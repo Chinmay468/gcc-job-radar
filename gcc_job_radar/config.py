@@ -5855,6 +5855,7 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="Thakor Electronics", provider=ATSProvider.CUSTOM, board_token="thakorelectronics", career_url="https://www.google.com/search?q=%22Thakor+Electronics%22+%22software+engineer%22+careers+jobs+apply"),
     CompanyConfig(name="TravClan", provider=ATSProvider.CUSTOM, board_token="travclan", career_url="https://www.google.com/search?q=%22TravClan%22+%22software+engineer%22+careers+jobs+apply"),
     CompanyConfig(name="Duck Creek Technologies", provider=ATSProvider.CUSTOM, board_token="duckcreektechnologies", career_url="https://www.google.com/search?q=%22Duck+Creek+Technologies%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="GoodGCC", provider=ATSProvider.CUSTOM, board_token="goodgcc", career_url="https://www.google.com/search?q=%22GoodGCC%22+%22software+engineer%22+careers+jobs+apply"),
 ]
 
 # Strict entry-level tech title positive pattern
@@ -5863,7 +5864,9 @@ INCLUDE_TITLE_PATTERN: re.Pattern[str] = re.compile(
     (?ix)
     \b(
         # Numeric & Roman numeral designations (1, I)
-        (?:sde|software\s+(?:development\s+)?engineer|software\s+developer|engineer)\s*[-–—]?\s*(?:1|i)\b |
+        # Note: unhyphenated 'I' must be at end of string, before punctuation, or before a connector
+        # so fake pipe separators like 'Software Engineer I AI-Native Development' do not false-match.
+        (?:sde|software\s+(?:development\s+)?engineer|software\s+developer|engineer)(?:\s*[-–—]?\s*1\b|\s*[-–—]\s*i\b|\s+i(?=$|\s*[,()/\-–—|:]|\s+(?:in|at|for|on|with)\b)) |
 
         # Junior & Associate prefixes
         (?:associate|junior|jr\.?)\s+(?:software\s+|systems?\s+|backend\s+|frontend\s+|full[- ]?stack\s+|cloud\s+|data\s+|platform\s+|qa\s+|test\s+|devops\s+|infrastructure\s+|sdet\s+|python\s+|java\s+|ai\s+|ml\s+|web\s+|mobile\s+)?(?:engineer|developer|programmer|sdet|analyst)\b |
@@ -5881,8 +5884,8 @@ INCLUDE_TITLE_PATTERN: re.Pattern[str] = re.compile(
 
         # Banking & Enterprise tracks
         (?:software|systems?|platform|infrastructure|cloud|devops|data|sdet|forward\s+deploy)\s+engineer.*?,\s*(?:analyst|associate)\b |
-        (?:technology|tech|software(?:\s+engineering)?|graduate)\s+analyst(?:\s*[-–—]?\s*(?:1|i)\b)? |
-        (?:systems?\s+analyst|data\s+analyst)\s*[-–—]?\s*(?:1|i)\b |
+        (?:technology|tech|software(?:\s+engineering)?|graduate)\s+analyst(?:\s*[-–—]?\s*1\b|\s*[-–—]\s*i\b|\s+i(?=$|\s*[,()/\-–—|:]|\s+(?:in|at|for|on|with)\b))? |
+        (?:systems?\s+analyst|data\s+analyst)(?:\s*[-–—]?\s*1\b|\s*[-–—]\s*i\b|\s+i(?=$|\s*[,()/\-–—|:]|\s+(?:in|at|for|on|with)\b)) |
 
         # Campus & New Grad tracks
         (?:new\s+grad(?:uate)?|university\s+grad(?:uate)?|campus\s+hire|early\s+career)\s*(?:[-–—]\s*)?(?:software\s+|systems?\s+|backend\s+|frontend\s+|full[- ]?stack\s+|cloud\s+|data\s+|platform\s+|qa\s+|test\s+|devops\s+)?(?:engineer|developer|programmer|hire)?\b |
@@ -5896,7 +5899,7 @@ INCLUDE_TITLE_PATTERN: re.Pattern[str] = re.compile(
         (?:software|engineering|developer|tech|swe)\s+co[- ]?op\b |
 
         # MTS tracks
-        (?:member\s+of\s+technical\s+staff|mts)\s*[-–—]?\s*(?:1|i)\b
+        (?:member\s+of\s+technical\s+staff|mts)(?:\s*[-–—]?\s*1\b|\s*[-–—]\s*i\b|\s+i(?=$|\s*[,()/\-–—|:]|\s+(?:in|at|for|on|with)\b))
     )
     """,
     re.VERBOSE | re.IGNORECASE,

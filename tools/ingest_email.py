@@ -852,14 +852,83 @@ def parse_email_alert_html(
     return jobs
 
 
+def fetch_public_job_description(url: str, timeout: float = 8.0) -> str:
+    """Fetch public job description text from a job posting URL (e.g. LinkedIn jobs/view/).
+
+    Extracts only the job description markup/JSON-LD so sidebar 'Similar jobs' never
+    cause false-positive disqualifications. Returns empty string on network/parse failure.
+    """
+    if not url or not url.startswith(("http://", "https://")):
+        return ""
+    try:
+        import httpx
+
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        resp = httpx.get(url, headers=headers, follow_redirects=True, timeout=timeout)
+        if resp.status_code != 200 or not resp.text:
+            return ""
+        page_html = resp.text
+
+        # 1. Check JSON-LD JobPosting description if present
+        for m_ld in re.finditer(
+            r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+            page_html,
+            re.DOTALL | re.IGNORECASE,
+        ):
+            try:
+                data = json.loads(m_ld.group(1).strip())
+                if isinstance(data, dict) and data.get("description"):
+                    desc_raw = html.unescape(str(data["description"]))
+                    desc_clean = re.sub(r"<(?:br|p|/p|li|/li|div|/div|tr|/tr)[^>]*>", "\n", desc_raw, flags=re.IGNORECASE)
+                    desc_clean = re.sub(r"<[^>]+>", " ", desc_clean)
+                    return re.sub(r"[ \t]+", " ", desc_clean).strip()
+            except Exception:
+                pass
+
+        # 2. Extract LinkedIn / ATS specific job description container
+        m_desc = re.search(
+            r'<div[^>]*class=["\'][^"\']*(?:show-more-less-html__markup|description__text|job-description)[^"\']*["\'][^>]*>(.*?)</div>',
+            page_html,
+            re.DOTALL | re.IGNORECASE,
+        )
+        if not m_desc:
+            m_desc = re.search(
+                r'<section[^>]*class=["\'][^"\']*(?:show-more-less-html|description)[^"\']*["\'][^>]*>(.*?)</section>',
+                page_html,
+                re.DOTALL | re.IGNORECASE,
+            )
+
+        raw_block = m_desc.group(1) if m_desc else ""
+        if not raw_block:
+            return ""
+
+        text = html.unescape(raw_block)
+        text = re.sub(r"<(?:br|p|/p|li|/li|div|/div|tr|/tr|h[1-6]|/h[1-6])[^>]*>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", " ", text)
+        return re.sub(r"[ \t]+", " ", text).strip()
+    except Exception as exc:
+        logger.debug("Could not fetch public JD for %s: %s", url, exc)
+        return ""
+
+
 def filter_and_convert_jobs(
     raw_jobs: list[RawParsedJob],
     date_header: Optional[str] = None,
+    verify_live_jd: Optional[bool] = None,
 ) -> list[JobPosting]:
     """Filter raw jobs against strict entry-level & India/Remote rules, returning valid JobPostings."""
     qualified: list[JobPosting] = []
     seen_urls: set[str] = set()
     seen_roles: set[tuple[str, str, str]] = set()
+
+    if verify_live_jd is None:
+        verify_live_jd = not bool(os.environ.get("PYTEST_CURRENT_TEST"))
 
     for item in raw_jobs:
         clean_title = clean_text_punctuation(item.title)
@@ -908,6 +977,20 @@ def filter_and_convert_jobs(
         if not (is_india or is_remote):
             logger.debug("Filtered out non-India/non-remote role: '%s' in '%s'", clean_title, clean_loc)
             continue
+
+        # Live JD verification for email alert cards whose email body has no JD text
+        if verify_live_jd and clean_url:
+            live_jd = fetch_public_job_description(clean_url)
+            if live_jd:
+                if requires_experienced_candidate(live_jd) or not is_entry_level(clean_title, content=live_jd):
+                    logger.info(
+                        "Rejected '%s' @ %s after live JD check (%s) — requires experienced candidate or ineligible batch.",
+                        clean_title,
+                        clean_company,
+                        clean_url,
+                    )
+                    continue
+                snippet = f"{snippet}\n{live_jd}".strip()
 
         seen_urls.add(url_key)
         platform_id = None

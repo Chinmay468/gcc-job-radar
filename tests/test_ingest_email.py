@@ -1092,4 +1092,48 @@ def test_parse_acciojob_alert_html_fast_bailout_on_unrelated():
     assert jobs == []
 
 
+def test_filter_and_convert_jobs_rejects_babaclick_fake_pipe_and_live_jd():
+    """Verify Babaclick 'Full-Stack Software Engineer I AI-Native Development' (1+ YOE) is rejected."""
+    raw_list = [
+        # 1. Rejected immediately by title filter (fake pipe 'I')
+        RawParsedJob(
+            title="Full-Stack Software Engineer I AI-Native Development",
+            company="Babaclick",
+            location="Gurugram, Haryana, India",
+            url="https://www.linkedin.com/jobs/view/4479929545/",
+            source_platform="linkedin",
+        ),
+        # 2. Even if title is valid 'Software Engineer I', live JD with '1+ years' is rejected
+        RawParsedJob(
+            title="Software Engineer I",
+            company="Babaclick",
+            location="Gurugram, Haryana, India",
+            url="https://www.linkedin.com/jobs/view/4479929545/",
+            source_platform="linkedin",
+        ),
+        # 3. Valid 'Software Engineer I' whose live JD is 0-2 years / 2027 batch passes
+        RawParsedJob(
+            title="Software Engineer I",
+            company="GoodGCC",
+            location="Bengaluru, Karnataka, India",
+            url="https://www.linkedin.com/jobs/view/1111111111/",
+            source_platform="linkedin",
+        ),
+    ]
+
+    def fake_fetch_jd(url: str, timeout: float = 8.0) -> str:
+        if "4479929545" in url:
+            return "Qualifications:\nExperience: 1+ years of professional software engineering experience."
+        if "1111111111" in url:
+            return "Qualifications:\n0-2 years experience or 2027 batch freshers welcome."
+        return ""
+
+    with patch("tools.ingest_email.fetch_public_job_description", side_effect=fake_fetch_jd):
+        qualified = filter_and_convert_jobs(raw_list, verify_live_jd=True)
+
+    assert len(qualified) == 1
+    assert qualified[0].company == "GoodGCC"
+
+
+
 

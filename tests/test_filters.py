@@ -550,3 +550,29 @@ def test_extract_application_dates_patterns() -> None:
     assert s5 == "2026-09-14"
     assert e5 is None
 
+
+@pytest.mark.parametrize(
+    "title,expected",
+    [
+        # Fake pipe 'I' used between two phrases should NOT match Roman Numeral I
+        ("Full-Stack Software Engineer I AI-Native Development", False),
+        ("Software Engineer I Cloud Infrastructure", False),
+        ("Data Analyst I Business Intelligence", False),
+        # Legitimate Roman Numeral I titles MUST still match
+        ("Software Engineer I", True),
+        ("Software Engineer-I", True),
+        ("Software Engineer - I", True),
+        ("Software Engineer I, Backend", True),
+        ("Software Engineer I - AI-Native Development", True),
+        ("Software Engineer I (AI-Native Development)", True),
+        ("SDE I", True),
+        ("MTS I", True),
+    ],
+)
+def test_fake_pipe_i_separator_in_title_vs_roman_numeral(title: str, expected: bool) -> None:
+    from gcc_job_radar.filters import is_entry_level
+
+    assert matches_target_title(title) is expected
+    assert is_entry_level(title) is expected
+
+
