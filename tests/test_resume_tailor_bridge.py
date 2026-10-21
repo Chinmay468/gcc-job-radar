@@ -149,18 +149,28 @@ def test_tailor_resume_subprocess_timeout(valid_entry_job: JobPosting, monkeypat
 
 
 def test_resume_tailor_sanitize_latex():
-    """Verify Unicode non-breaking hyphens, en/em-dashes, and quotes are normalized for LaTeX and Windows cp1252."""
+    """Verify Unicode non-breaking hyphens, en/em-dashes, quotes, and bare ampersands are normalized for LaTeX."""
     import sys
     sys.path.append("builder")
     from resume_tailor import sanitize_latex
 
-    raw = "full\u2011stack \u2013 distributed \u2014 \u2018secure\u2019 \u201ccloud\u201d"
+    raw = (
+        "full\u2011stack \u2013 distributed \u2014 \u2018secure\u2019 \u201ccloud\u201d\n"
+        r"\begin{tabular}{ @{} >{\bfseries}l @{\hspace{2ex}} l }" + "\n"
+        r"Backend :& Spring Boot, REST & GraphQL \\" + "\n"
+        r"\end{tabular}" + "\n"
+        r"\textbf{GCC Job Radar : Automated Job Discovery & Scoring System} $\rightarrow$" + "\n"
+        r"\item Organized the \textbf{Knowledge Knockout} technical fest (2024 \& 2025)."
+    )
     sanitized = sanitize_latex(raw)
     assert "\u2011" not in sanitized
     assert "full-stack" in sanitized
     assert " -- distributed --- " in sanitized
     assert "`secure'" in sanitized
     assert "``cloud''" in sanitized
+    assert r"Backend :& Spring Boot, REST \& GraphQL \\" in sanitized
+    assert r"\textbf{GCC Job Radar : Automated Job Discovery \& Scoring System}" in sanitized
+    assert r"(2024 \& 2025)" in sanitized
 
 
 def test_detect_candidate_stack_gaps_and_format_note():
