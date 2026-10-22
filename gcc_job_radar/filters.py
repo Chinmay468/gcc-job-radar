@@ -57,7 +57,7 @@ _NON_TECH_DISCIPLINE_PATTERN = re.compile(
 
 _GET_PATTERN = re.compile(
     r"""(?ix)
-    \b(?:graduate\s+engineer\s+trainee|\bget\b|engineering\s+trainee)\b
+    \b(?:graduate\s+engineer\s+trainee|\bget\b|engineering\s+trainee|campus\s+program)\b
     """,
 )
 

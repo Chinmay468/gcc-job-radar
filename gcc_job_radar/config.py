@@ -573,6 +573,7 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="Caterpillar", provider=ATSProvider.WORKDAY, board_token="cat/CaterpillarCareers", cluster="5"),
     CompanyConfig(name="BrowserStack", provider=ATSProvider.WORKDAY, board_token="browserstack/External", cluster="3"),
     CompanyConfig(name="Qualcomm", provider=ATSProvider.WORKDAY, board_token="qualcomm/External", cluster="12"),
+    CompanyConfig(name="Nasdaq", provider=ATSProvider.WORKDAY, board_token="nasdaq/Global_External_Site", cluster="1"),
 
     # --- SMARTRECRUITERS: Enterprise GCCs, Retail & Global Conglomerates ---
     CompanyConfig(name="Wolters Kluwer", provider=ATSProvider.SMARTRECRUITERS, board_token="WoltersKluwer"),
@@ -5856,6 +5857,10 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="TravClan", provider=ATSProvider.CUSTOM, board_token="travclan", career_url="https://www.google.com/search?q=%22TravClan%22+%22software+engineer%22+careers+jobs+apply"),
     CompanyConfig(name="Duck Creek Technologies", provider=ATSProvider.CUSTOM, board_token="duckcreektechnologies", career_url="https://www.google.com/search?q=%22Duck+Creek+Technologies%22+%22software+engineer%22+careers+jobs+apply"),
     CompanyConfig(name="GoodGCC", provider=ATSProvider.CUSTOM, board_token="goodgcc", career_url="https://www.google.com/search?q=%22GoodGCC%22+%22software+engineer%22+careers+jobs+apply"),
+    CompanyConfig(name="Runable", provider=ATSProvider.CUSTOM, board_token="runable", career_url="https://runable.com/careers"),
+    CompanyConfig(name="Rocket Health", provider=ATSProvider.CUSTOM, board_token="rockethealth", career_url="https://rockethealth.app/careers"),
+    CompanyConfig(name="Cnvrted", provider=ATSProvider.CUSTOM, board_token="cnvrted", career_url="https://www.cnvrted.com/careers"),
+    CompanyConfig(name="CreditNirvana", provider=ATSProvider.CUSTOM, board_token="creditnirvana", career_url="https://creditnirvana.ai/careers"),
 ]
 
 # Strict entry-level tech title positive pattern
@@ -5889,6 +5894,7 @@ INCLUDE_TITLE_PATTERN: re.Pattern[str] = re.compile(
 
         # Campus & New Grad tracks
         (?:new\s+grad(?:uate)?|university\s+grad(?:uate)?|campus\s+hire|early\s+career)\s*(?:[-–—]\s*)?(?:software\s+|systems?\s+|backend\s+|frontend\s+|full[- ]?stack\s+|cloud\s+|data\s+|platform\s+|qa\s+|test\s+|devops\s+)?(?:engineer|developer|programmer|hire)?\b |
+        campus\s+program\b |
 
         # Internships & Apprenticeships
         (?:software|engineering|engineer|developer|tech|swe|data|qa|backend|frontend|systems?|cloud|platform|devops|ai|full[\s\-]?stack)\s+intern\b |
