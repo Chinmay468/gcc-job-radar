@@ -181,7 +181,7 @@ def test_push_to_turso_delta_only_skips_unchanged_rows(tmp_path: Path) -> None:
     seen_jobs_batches = [
         call.args[0]
         for call in mock_client.batch.call_args_list
-        if call.args and call.args[0] and "seen_jobs" in str(call.args[0][0])
+        if call.args and call.args[0] and "seen_jobs" in getattr(call.args[0][0], "sql", "")
     ]
     assert len(seen_jobs_batches) == 1
     assert len(seen_jobs_batches[0]) == 1
