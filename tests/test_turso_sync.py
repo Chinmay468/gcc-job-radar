@@ -178,4 +178,10 @@ def test_push_to_turso_delta_only_skips_unchanged_rows(tmp_path: Path) -> None:
     stats = push_to_turso(db_path=db_file, client=mock_client, delta_only=True)
     # Only 'new_2' should be pushed; 'same_1' is skipped despite last_seen_at difference
     assert stats.get("seen_jobs") == 1
-    assert mock_client.batch.call_count == 1
+    seen_jobs_batches = [
+        call.args[0]
+        for call in mock_client.batch.call_args_list
+        if call.args and call.args[0] and "seen_jobs" in str(call.args[0][0])
+    ]
+    assert len(seen_jobs_batches) == 1
+    assert len(seen_jobs_batches[0]) == 1
