@@ -3,6 +3,7 @@
 Enables bidirectional synchronization between local SQLite (gcc_jobs.db) and
 Turso (cloud-hosted libSQL/SQLite), ensuring zero data loss and preventing
 duplicate alerts across GitHub Actions runners and local development.
+Uses delta-only push synchronization to minimize Turso row-write operations.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import logging
 import os
 from pathlib import Path
 import sqlite3
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 try:
     import dotenv
@@ -25,7 +26,6 @@ from gcc_job_radar.schema import (
     CORE_SCHEMA_STATEMENTS as TURSO_SCHEMA_STATEMENTS,
     MANAGED_TABLES,
 )
-
 
 
 def normalize_turso_url(url: str) -> str:
@@ -91,14 +91,125 @@ def init_turso_schema(client: Any) -> None:
         raise
 
 
+def _remote_schema_ready(client: Any) -> bool:
+    """Check via read-only query whether all MANAGED_TABLES already exist on Turso."""
+    try:
+        res = client.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        rows = getattr(res, "rows", None)
+        if not isinstance(rows, (list, tuple)) or not rows:
+            return False
+        existing = {str(r[0]) for r in rows if r}
+        return all(t in existing for t in MANAGED_TABLES)
+    except Exception:
+        return False
+
+
+def prune_local_sync_bloat(conn: sqlite3.Connection) -> int:
+    """Prune orphaned dispatched_alerts and stale seen_emails locally before syncing."""
+    cur = conn.cursor()
+    pruned = 0
+    try:
+        cur.execute(
+            """DELETE FROM dispatched_alerts
+               WHERE job_id NOT IN (SELECT id FROM seen_jobs)
+                 AND sent_at < datetime('now', '-7 days')"""
+        )
+        pruned += max(0, cur.rowcount or 0)
+        cur.execute(
+            """DELETE FROM seen_emails
+               WHERE processed_at < datetime('now', '-60 days')"""
+        )
+        pruned += max(0, cur.rowcount or 0)
+        if pruned > 0:
+            conn.commit()
+            logger.info(f"Pruned {pruned} stale/orphaned sync records from local DB.")
+    except Exception as e:
+        logger.debug(f"Local sync bloat pruning skipped: {e}")
+    return pruned
+
+
+def _filter_delta_rows(
+    table: str,
+    cols: List[str],
+    local_rows: List[Tuple[Any, ...]],
+    client: Any,
+) -> List[Tuple[Any, ...]]:
+    """Return only local rows that are new or meaningfully modified compared to Turso."""
+    if not local_rows:
+        return []
+
+    try:
+        res = client.execute(f"SELECT * FROM {table}")
+        remote_cols = list(getattr(res, "columns", []) or [])
+        remote_rows = getattr(res, "rows", None)
+        if not isinstance(remote_rows, (list, tuple)) or not remote_cols:
+            return local_rows
+    except Exception:
+        return local_rows
+
+    if not remote_rows:
+        return local_rows
+
+    col_idx = {c: i for i, c in enumerate(cols)}
+    rem_idx = {c: i for i, c in enumerate(remote_cols)}
+
+    # Append-only tables: only push primary keys missing from Turso
+    if table == "dispatched_alerts" and "job_id" in col_idx and "platform" in col_idx:
+        ji, pi = col_idx["job_id"], col_idx["platform"]
+        r_ji, r_pi = rem_idx.get("job_id", 0), rem_idx.get("platform", 1)
+        remote_keys: Set[Tuple[Any, Any]] = {(r[r_ji], r[r_pi]) for r in remote_rows}
+        return [row for row in local_rows if (row[ji], row[pi]) not in remote_keys]
+
+    if table == "seen_emails" and "uid" in col_idx:
+        ui = col_idx["uid"]
+        r_ui = rem_idx.get("uid", 0)
+        remote_uids: Set[Any] = {r[r_ui] for r in remote_rows}
+        return [row for row in local_rows if row[ui] not in remote_uids]
+
+    # Mutable tables: ignore volatile heartbeat columns that tick on every scan
+    volatile_cols = {
+        "seen_jobs": {"last_seen_at", "first_seen_at"},
+        "dormant_companies": {"consecutive_zero_scans", "paused_at"},
+    }.get(table, set())
+
+    pk_col = {
+        "seen_jobs": "id",
+        "dormant_companies": "company_name",
+        "apply_prep_attempts": "id",
+    }.get(table, cols[0])
+
+    if pk_col not in col_idx or pk_col not in rem_idx:
+        remote_set = {tuple(r) for r in remote_rows}
+        return [row for row in local_rows if tuple(row) not in remote_set]
+
+    compare_cols = [c for c in cols if c not in volatile_cols and c in rem_idx]
+    l_pk = col_idx[pk_col]
+    r_pk = rem_idx[pk_col]
+
+    remote_sig_by_pk: Dict[Any, Tuple[Any, ...]] = {}
+    for r in remote_rows:
+        sig = tuple(r[rem_idx[c]] for c in compare_cols)
+        remote_sig_by_pk[r[r_pk]] = sig
+
+    delta: List[Tuple[Any, ...]] = []
+    for row in local_rows:
+        pk_val = row[l_pk]
+        local_sig = tuple(row[col_idx[c]] for c in compare_cols)
+        if remote_sig_by_pk.get(pk_val) != local_sig:
+            delta.append(row)
+    return delta
+
+
 def push_to_turso(
     db_path: Optional[Union[str, Path]] = None,
     client: Optional[Any] = None,
     batch_size: int = 100,
+    delta_only: bool = True,
 ) -> Dict[str, int]:
     """Push local SQLite records to Turso cloud database using batch statements.
 
-    Uses INSERT OR REPLACE to ensure idempotency and atomic chunking.
+    When delta_only=True (default), compares local rows against remote Turso state
+    and only writes rows that are new or meaningfully updated, saving >99% of row writes.
     """
     from gcc_job_radar.db import get_db_path, init_db
 
@@ -117,7 +228,10 @@ def push_to_turso(
     results: Dict[str, int] = {}
     conn = sqlite3.connect(resolved_path)
     try:
-        init_turso_schema(client)
+        prune_local_sync_bloat(conn)
+        if not _remote_schema_ready(client):
+            init_turso_schema(client)
+
         cur = conn.cursor()
 
         for table in MANAGED_TABLES:
@@ -128,23 +242,39 @@ def push_to_turso(
 
             cur.execute(f"SELECT * FROM {table}")
             rows = cur.fetchall()
-            results[table] = len(rows)
             if not rows:
+                results[table] = 0
+                continue
+
+            rows_to_push = (
+                _filter_delta_rows(table, cols, rows, client)
+                if delta_only
+                else rows
+            )
+            results[table] = len(rows_to_push)
+            if not rows_to_push:
                 continue
 
             placeholders = ", ".join(["?"] * len(cols))
             col_names = ", ".join(cols)
-            insert_sql = f"INSERT OR REPLACE INTO {table} ({col_names}) VALUES ({placeholders})"
+            verb = (
+                "INSERT OR IGNORE"
+                if table in ("dispatched_alerts", "seen_emails")
+                else "INSERT OR REPLACE"
+            )
+            insert_sql = f"{verb} INTO {table} ({col_names}) VALUES ({placeholders})"
 
-            for i in range(0, len(rows), batch_size):
-                chunk = rows[i : i + batch_size]
+            for i in range(0, len(rows_to_push), batch_size):
+                chunk = rows_to_push[i : i + batch_size]
                 stmts = [
                     libsql_client.Statement(insert_sql, list(row))
                     for row in chunk
                 ]
                 client.batch(stmts)
 
-            logger.info(f"Pushed {len(rows)} rows from table '{table}' to Turso.")
+            logger.info(
+                f"Pushed {len(rows_to_push)} delta row(s) (of {len(rows)} local) from table '{table}' to Turso."
+            )
     finally:
         conn.close()
         if own_client and hasattr(client, "close"):

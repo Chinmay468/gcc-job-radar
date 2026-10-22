@@ -129,3 +129,53 @@ def test_get_sync_status_unconfigured(monkeypatch: pytest.MonkeyPatch, tmp_path:
     db_file = tmp_path / "test_status.db"
     st = get_sync_status(db_path=db_file)
     assert st.get("configured") is False
+
+
+def test_push_to_turso_delta_only_skips_unchanged_rows(tmp_path: Path) -> None:
+    """Verify push_to_turso skips rows already matching on Turso (ignoring last_seen_at drift)."""
+    db_file = tmp_path / "test_delta.db"
+    from gcc_job_radar.db import init_db
+    init_db(db_file)
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            """INSERT INTO seen_jobs (id, company, title, location, apply_url, provider, last_seen_at)
+               VALUES ('same_1', 'Acme', 'Dev', 'Bangalore', 'https://example.com/1', 'greenhouse', '2026-10-22 10:00:00')"""
+        )
+        conn.execute(
+            """INSERT INTO seen_jobs (id, company, title, location, apply_url, provider, last_seen_at)
+               VALUES ('new_2', 'Nasdaq', 'Campus Program 2027', 'Bangalore', 'https://example.com/2', 'workday', '2026-10-22 11:00:00')"""
+        )
+        conn.commit()
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(seen_jobs)")
+        cols = [r[1] for r in cur.fetchall()]
+        cur.execute("SELECT * FROM seen_jobs WHERE id = 'same_1'")
+        same_row = list(cur.fetchone())
+
+    # Simulate remote having 'same_1' with an older last_seen_at timestamp
+    last_seen_idx = cols.index("last_seen_at")
+    remote_same_row = list(same_row)
+    remote_same_row[last_seen_idx] = "2026-10-20 08:00:00"
+
+    mock_client = MagicMock()
+
+    def mock_execute(sql: str):
+        res = MagicMock()
+        if "sqlite_master" in sql:
+            res.rows = [("seen_jobs",), ("dispatched_alerts",), ("seen_emails",), ("dormant_companies",), ("apply_prep_attempts",)]
+            return res
+        if "FROM seen_jobs" in sql:
+            res.columns = cols
+            res.rows = [tuple(remote_same_row)]
+            return res
+        res.columns = []
+        res.rows = []
+        return res
+
+    mock_client.execute.side_effect = mock_execute
+
+    stats = push_to_turso(db_path=db_file, client=mock_client, delta_only=True)
+    # Only 'new_2' should be pushed; 'same_1' is skipped despite last_seen_at difference
+    assert stats.get("seen_jobs") == 1
+    assert mock_client.batch.call_count == 1
