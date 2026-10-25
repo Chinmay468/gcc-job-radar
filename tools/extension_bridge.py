@@ -160,6 +160,8 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.handle_download(filename, as_attachment=False)
         elif path == "/candidate_profile":
             self.handle_get_candidate_profile()
+        elif path == "/knowledge_base":
+            self.handle_get_knowledge_base()
         else:
             self._send_json(404, {"error": "Not Found", "path": path})
 
@@ -190,6 +192,10 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             self.handle_save_candidate_profile()
         elif path == "/answer_screening_question":
             self.handle_answer_screening_question()
+        elif path == "/knowledge_base":
+            self.handle_save_knowledge_base()
+        elif path == "/knowledge_base/sync":
+            self.handle_sync_knowledge_base()
         else:
             self._send_json(404, {"error": "Not Found", "path": path})
 
@@ -716,6 +722,50 @@ class BridgeHTTPRequestHandler(http.server.BaseHTTPRequestHandler):
             logger.error(f"Error answering screening question: {e}", exc_info=True)
             self._send_json(500, {"error": str(e), "success": False})
 
+
+
+
+    def handle_get_knowledge_base(self):
+        """Returns the centralized candidate knowledge base."""
+        try:
+            from tools.sync_knowledge_base import load_knowledge_base
+            kb = load_knowledge_base()
+            self._send_json(200, {"success": True, "knowledge_base": kb})
+        except Exception as e:
+            logger.error(f"Error fetching knowledge base: {e}", exc_info=True)
+            self._send_json(500, {"error": str(e), "success": False})
+
+    def handle_save_knowledge_base(self):
+        """Updates and exports the centralized candidate knowledge base locally."""
+        try:
+            from tools.sync_knowledge_base import (
+                save_knowledge_base,
+                export_projects_json,
+                export_github_dossier,
+                export_candidate_profile,
+            )
+            body = self._read_json_body()
+            kb = body.get("knowledge_base") or body
+            save_knowledge_base(kb)
+            export_projects_json(kb)
+            export_github_dossier(kb)
+            export_candidate_profile(kb)
+            self._send_json(200, {"success": True, "knowledge_base": kb})
+        except Exception as e:
+            logger.error(f"Error saving knowledge base: {e}", exc_info=True)
+            self._send_json(500, {"error": str(e), "success": False})
+
+    def handle_sync_knowledge_base(self):
+        """Triggers GitHub metadata sync and re-exports knowledge base artifacts locally."""
+        try:
+            from tools.sync_knowledge_base import sync_knowledge_base
+            body = self._read_json_body()
+            fetch_gh = bool(body.get("fetch_github", False))
+            res = sync_knowledge_base(fetch_github=fetch_gh, export_all=True)
+            self._send_json(200, {"success": True, "result": res})
+        except Exception as e:
+            logger.error(f"Error syncing knowledge base: {e}", exc_info=True)
+            self._send_json(500, {"error": str(e), "success": False})
 
 
 class ThreadingBridgeServer(socketserver.ThreadingTCPServer):
