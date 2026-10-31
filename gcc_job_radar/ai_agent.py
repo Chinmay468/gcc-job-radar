@@ -1120,6 +1120,11 @@ async def execute_tool(
             }
             for r in interviews
         ]
+        ack_compact = [_fmt_item(r) for r in acknowledged]
+        unique_ack_companies = sorted(
+            {r["company"] for r in ack_compact if r["company"] and r["company"] != "Unknown"},
+            key=lambda x: x.lower(),
+        )
 
         return {
             "status": "success",
@@ -1131,13 +1136,17 @@ async def execute_tool(
             "earlier_rejections": older_compact,
             "interviews_or_oa_count": len(interview_compact),
             "interviews_or_oa": interview_compact,
-            "acknowledged_count": len(acknowledged),
+            "acknowledged_count": len(ack_compact),
+            "unique_acknowledged_companies_count": len(unique_ack_companies),
+            "unique_acknowledged_companies": unique_ack_companies,
+            "acknowledged_applications": ack_compact,
             "db_updated_count": len(scan_res.get("db_updates", [])),
             "note": (
                 f"Scanned {len(accounts)} email account(s) over the last {days} days. "
-                f"Found {len(recent_compact)} rejection(s) in the last 30 days "
+                f"Found {len(ack_compact)} application receipt(s) across {len(unique_ack_companies)} companies, "
+                f"{len(recent_compact)} rejection(s) in the last 30 days "
                 f"({len(rejections)} total rejections across {days} days). "
-                "Report the exact count and list every rejected company, role, date, and email account clearly."
+                "Report the exact count and list every applied and rejected company, role, date, and email account clearly."
             ),
         }
 
@@ -1354,25 +1363,48 @@ def format_tool_result_summary(name: str, result: dict[str, Any]) -> str:
         recent_30d = result.get("rejections_last_30_days", [])
         older_rejs = result.get("earlier_rejections", [])
         interviews = result.get("interviews_or_oa", [])
+        acknowledged = result.get("acknowledged_applications", [])
+        unique_ack_comps = result.get("unique_acknowledged_companies", [])
         days = result.get("days_scanned", 90)
         total_rejs = result.get("total_rejections_count", len(recent_30d) + len(older_rejs))
+        total_acks = result.get("acknowledged_count", len(acknowledged))
+
+        if not accounts:
+            return (
+                f"⚠️ <b>Email Inboxes Not Configured in Environment</b>\n\n"
+                f"Direct inbox scanning requires IMAP credentials. No email accounts were found in environment variables.\n\n"
+                f"To enable email scanning on Render or locally, add:\n"
+                f"• <code>EMAIL_USER</code> &amp; <code>EMAIL_PASSWORD</code>\n"
+                f"• <i>(Optional)</i> <code>EMAIL_USER2</code> &amp; <code>EMAIL_PASSWORD2</code>"
+            )
 
         acc_str = ", ".join(f"<code>{html.escape(str(a))}</code>" for a in accounts)
-        if total_rejs == 0 and not interviews:
+        if total_rejs == 0 and not interviews and not acknowledged:
             return (
                 f"📬 <b>Application Status &amp; Rejection Scan ({days} Days)</b>\n\n"
                 f"Scanned {len(accounts)} account(s): {acc_str}\n\n"
-                f"• No rejection notices found in the last {days} days."
+                f"• No rejection notices or application receipts found in the last {days} days."
             )
 
         lines = [
             f"📬 <b>Email Rejection &amp; Status Scan Summary</b>\n",
             f"• <b>Accounts Scanned ({len(accounts)}):</b> {acc_str}",
+            f"• <b>Applied Receipts Confirmed (Last {days} Days):</b> <b>{total_acks}</b> (across {len(unique_ack_comps)} companies)",
             f"• <b>Rejections (Last 30 Days):</b> <b>{len(recent_30d)}</b>",
             f"• <b>Total Rejections (Last {days} Days):</b> <b>{total_rejs}</b>",
         ]
         if interviews:
             lines.append(f"• <b>OA / Interview Invites Found:</b> <b>{len(interviews)}</b>")
+
+        if acknowledged:
+            lines.append(f"\n🚀 <b>Application Confirmations ({total_acks} across {len(unique_ack_comps)} companies):</b>")
+            for idx, r in enumerate(acknowledged[:25], 1):
+                comp = html.escape(str(r.get("company", "Unknown")))
+                role = html.escape(str(r.get("role", "Application")))
+                dt = html.escape(str(r.get("date", "Recent")))
+                lines.append(f"{idx}. <b>{comp}</b> — {role} <i>({dt})</i>")
+            if len(acknowledged) > 25:
+                lines.append(f"<i>...and {len(acknowledged) - 25} more application receipts in email.</i>")
 
         if recent_30d:
             lines.append(f"\n❌ <b>Recent Rejections (Last 30 Days — {len(recent_30d)}):</b>")
@@ -2453,9 +2485,9 @@ def extract_days_from_query(query: str, default: int = 90) -> int:
 
 
 def is_rejection_status_query(query: str) -> bool:
-    """Return True if the user is asking to scan/count email rejections or application reverts."""
+    """Return True if the user is asking to scan/count email rejections, application receipts, or status reverts."""
     q = (query or "").lower().strip()
-    return any(
+    if any(
         phrase in q
         for phrase in [
             "rejection",
@@ -2469,7 +2501,11 @@ def is_rejection_status_query(query: str) -> bool:
             "how many rejected",
             "rejected from",
         ]
-    )
+    ):
+        return True
+    if "email" in q and any(w in q for w in ("applied", "application", "applications", "applied to")):
+        return True
+    return False
 
 
 async def ask_ai_agent(

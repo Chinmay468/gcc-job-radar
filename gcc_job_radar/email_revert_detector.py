@@ -490,6 +490,41 @@ def extract_company_and_role(subject: str, sender: str, body: str) -> Tuple[str,
         if m:
             company = m.group(1).strip()
 
+    # Pattern M: "We received your <Company> Application" / "Received your <Company> application"
+    if not company:
+        m = re.search(r"(?:We\s+received\s+your|Received\s+your)\s+([A-Za-z0-9 .&-]+?)\s+[Aa]pplication", subj, re.I)
+        if m:
+            company = m.group(1).strip()
+
+    # Pattern N: "Chinmay, Thank you for your application at <Company>" / "Thank you for applying to <Company>"
+    if not company:
+        m = re.search(r"(?:Chinmay,?\s*)?(?:Thanks|Thank\s+you)\s+for\s+(?:applying\s+(?:to|at)|your\s+application\s+(?:to|at|with))\s+([A-Za-z0-9 .&-]+?)(?:,\s*Chinmay)?[!.]?$", subj, re.I)
+        if m:
+            cand = m.group(1).strip()
+            if cand.lower() not in ("the", "our", "a", "this"):
+                company = cand
+
+    # Pattern O: "Thanks for applying to <Role> at <Company>!"
+    if not company:
+        m = re.search(r"(?:Thanks|Thank\s+you)\s+for\s+applying\s+to\s+(.+?)\s+at\s+([A-Za-z0-9 .&-]+?)[!.]?$", subj, re.I)
+        if m:
+            if not role:
+                role = m.group(1).strip()
+            company = m.group(2).strip()
+
+    # Pattern P: "Next step in your <Role> application at <Company>"
+    if not company:
+        m = re.search(r"application\s+at\s+([A-Za-z0-9 .&-]+?)(?::|$)", subj, re.I)
+        if m:
+            company = m.group(1).strip()
+
+    # Pattern Q: "Your recent job application for <Role/ID>"
+    if not company:
+        m = re.match(r"^Your\s+recent\s+job\s+application\s+for\s+(.+)$", subj, re.I)
+        if m:
+            if not role:
+                role = m.group(1).strip()
+
     # 2. Extract company from sender display name if still missing
     if not company:
         disp_m = re.match(r'^"?([^"<]+?)"?\s*<', snd)
@@ -931,6 +966,7 @@ def scan_email_reverts(
     ]
 
     unique_rejected_companies = sorted({r["company"] for r in rejections}, key=lambda x: x.lower())
+    unique_acknowledged_companies = sorted({r["company"] for r in acknowledged}, key=lambda x: x.lower())
 
     return {
         "status": "success",
@@ -942,6 +978,10 @@ def scan_email_reverts(
         "rejections": rejections,
         "interviews_and_oas_count": len(interviews),
         "interviews_and_oas": interviews,
+        "acknowledged_count": len(acknowledged),
+        "unique_acknowledged_companies_count": len(unique_acknowledged_companies),
+        "unique_acknowledged_companies": unique_acknowledged_companies,
+        "acknowledged": acknowledged,
         "reverts": rejections + interviews + acknowledged,
         "db_updates": db_updates,
     }
