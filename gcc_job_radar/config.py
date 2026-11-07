@@ -14,6 +14,7 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="Microsoft", provider=ATSProvider.MICROSOFT, board_token="microsoft"),
     CompanyConfig(name="Apple", provider=ATSProvider.APPLE, board_token="apple"),
     CompanyConfig(name="Electronic Arts", provider=ATSProvider.EA, board_token="ea"),
+    CompanyConfig(name="Uber", provider=ATSProvider.UBER, board_token="uber"),
     CompanyConfig(
         name="Flipkart",
         provider=ATSProvider.CUSTOM,
@@ -1007,7 +1008,6 @@ COMPANIES: list[CompanyConfig] = [
     CompanyConfig(name="SoFi", provider=ATSProvider.GREENHOUSE, board_token="sofi"),
     CompanyConfig(name="SurveyMonkey", provider=ATSProvider.ASHBY, board_token="surveymonkey"),
     CompanyConfig(name="Upwork", provider=ATSProvider.GREENHOUSE, board_token="upwork"),
-    CompanyConfig(name="Uber", provider=ATSProvider.SMARTRECRUITERS, board_token="uber"),
     CompanyConfig(name="ServiceNow", provider=ATSProvider.SMARTRECRUITERS, board_token="servicenow"),
     CompanyConfig(name="Warby Parker", provider=ATSProvider.SMARTRECRUITERS, board_token="wp"),
     CompanyConfig(name="Appian", provider=ATSProvider.GREENHOUSE, board_token="appian"),

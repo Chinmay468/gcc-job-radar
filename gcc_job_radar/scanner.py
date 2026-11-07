@@ -21,6 +21,7 @@ from gcc_job_radar.clients.lever import LeverClient
 from gcc_job_radar.clients.microsoft import MicrosoftClient
 from gcc_job_radar.clients.phenom_successfactors import PhenomSuccessFactorsClient
 from gcc_job_radar.clients.smartrecruiters import SmartRecruitersClient
+from gcc_job_radar.clients.uber import UberClient
 from gcc_job_radar.clients.workday import WorkdayClient
 from gcc_job_radar.clients.custom_career import CustomCareerClient
 from gcc_job_radar.config import COMPANIES
@@ -63,6 +64,7 @@ DEFAULT_DOMAIN_LIMITS: dict[str, int] = {
     "microsoft.eightfold.ai": 5,
     "jobs.apple.com": 5,
     "jobs.ea.com": 5,
+    "uber.com": 5,
 }
 
 
@@ -86,6 +88,8 @@ def get_company_domain(company: CompanyConfig) -> str:
         return "jobs.apple.com"
     elif company.provider == ATSProvider.EA:
         return "jobs.ea.com"
+    elif company.provider == ATSProvider.UBER:
+        return "uber.com"
     elif company.provider == ATSProvider.PHENOM_SUCCESSFACTORS:
 
         token = company.board_token.strip()
@@ -229,6 +233,8 @@ async def fetch_single_company(company: CompanyConfig, client: httpx.AsyncClient
         ats_client = AppleClient(client)
     elif company.provider == ATSProvider.EA:
         ats_client = EAClient(client)
+    elif company.provider == ATSProvider.UBER:
+        ats_client = UberClient(client)
     elif company.provider == ATSProvider.CUSTOM or str(company.provider).lower() == "custom":
         ats_client = CustomCareerClient(client)
     else:

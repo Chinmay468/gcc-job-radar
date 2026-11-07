@@ -10,6 +10,7 @@ from gcc_job_radar.clients.lever import LeverClient
 from gcc_job_radar.clients.microsoft import MicrosoftClient
 from gcc_job_radar.clients.phenom_successfactors import PhenomSuccessFactorsClient
 from gcc_job_radar.clients.smartrecruiters import SmartRecruitersClient
+from gcc_job_radar.clients.uber import UberClient
 from gcc_job_radar.clients.workday import WorkdayClient
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "AshbyClient",
     "MicrosoftClient",
     "SmartRecruitersClient",
+    "UberClient",
     "WorkdayClient",
     "PhenomSuccessFactorsClient",
 ]

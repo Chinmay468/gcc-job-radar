@@ -24,6 +24,8 @@ DIRECT_ATS_DOMAINS: tuple[str, ...] = (
     "jobs.apple.com",
     "apply.careers.microsoft.com",
     "microsoft.eightfold.ai",
+    "oraclecloud.com",
+    "uber.com",
 )
 
 AGGREGATOR_DOMAINS: tuple[str, ...] = (
@@ -103,7 +105,7 @@ KNOWN_CAREER_PORTALS: dict[str, str] = {
     "sap": "https://jobs.sap.com",
     "siemens": "https://jobs.siemens.com",
     "schneider electric": "https://careers.se.com",
-    "uber": "https://www.uber.com/us/en/careers",
+    "uber": "https://www.uber.com/global/en/careers/list/",
     "netflix": "https://jobs.netflix.com",
     "stripe": "https://stripe.com/jobs",
     "spotify": "https://www.lifeatspotify.com",

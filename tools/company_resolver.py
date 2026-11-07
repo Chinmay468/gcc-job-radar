@@ -137,6 +137,8 @@ def get_canonical_ats_url(comp: CompanyConfig) -> Tuple[str, str]:
         return "https://jobs.apple.com", "Open Apple Jobs ↗"
     elif prov == ATSProvider.EA or str(prov).lower() == "ea":
         return "https://ea.gr8people.com", "Open EA Careers ↗"
+    elif prov == ATSProvider.UBER or str(prov).lower() == "uber":
+        return "https://www.uber.com/global/en/careers/list/", "Open Uber Careers ↗"
     elif prov == ATSProvider.WORKDAY or str(prov).lower() == "workday":
         if comp.career_url:
             return comp.career_url, "Open Workday Portal ↗"

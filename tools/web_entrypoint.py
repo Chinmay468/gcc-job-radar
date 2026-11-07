@@ -111,6 +111,41 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
         else:
             self._send_response_payload(404, {"error": "not found"}, write_body=False)
 
+    def do_POST(self) -> None:
+        clean_path = self.path.split("?")[0].rstrip("/")
+        if clean_path in ("/send", "/notify"):
+            content_length = int(self.headers.get("Content-Length", 0))
+            raw_body = self.rfile.read(content_length).decode("utf-8")
+            try:
+                data = json.loads(raw_body)
+                text = data.get("text", "")
+                chat_id = data.get("chat_id") or os.getenv("TELEGRAM_CHAT_ID")
+                bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+                if not text or not bot_token or not chat_id:
+                    self._send_response_payload(400, {"error": "Missing text or bot credentials"})
+                    return
+
+                import urllib.request
+                tg_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                payload = {
+                    "chat_id": chat_id,
+                    "text": text,
+                    "parse_mode": data.get("parse_mode", "HTML"),
+                    "disable_web_page_preview": data.get("disable_web_page_preview", True),
+                }
+                req = urllib.request.Request(
+                    tg_url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=10.0) as resp:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    self._send_response_payload(200, {"ok": True, "result": resp_data.get("result")})
+            except Exception as exc:
+                self._send_response_payload(500, {"error": str(exc)})
+        else:
+            self._send_response_payload(404, {"error": "not found"})
+
     def log_message(self, format: str, *args: object) -> None:
         """Suppress default stderr HTTP request logging to keep console logs clean."""
         return

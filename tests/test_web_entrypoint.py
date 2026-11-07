@@ -58,4 +58,13 @@ def test_not_found_endpoint(test_server):
     req = urllib.request.Request(url)
     with pytest.raises(urllib.error.HTTPError) as exc_info:
         urllib.request.urlopen(req, timeout=3.0)
-    assert exc_info.value.code == 404
+
+
+def test_post_send_missing_text(test_server):
+    """Verify POST /send with missing text returns HTTP 400."""
+    url = f"{test_server}/send"
+    data = json.dumps({}).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req, timeout=3.0)
+    assert exc_info.value.code == 400

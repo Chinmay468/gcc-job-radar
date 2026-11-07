@@ -3,6 +3,7 @@ Zerodha
 Postman
 BrowserStack
 Razorpay
+Uber
 Groww
 CRED
 Meesho
