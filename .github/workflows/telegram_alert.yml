@@ -1,0 +1,24 @@
+name: Telegram Alert Relay
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'HTML message text to send to Telegram'
+        required: true
+        type: string
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send to Telegram
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MSG: ${{ inputs.message }}
+        run: |
+          PAYLOAD=$(jq -n --arg chat "$CHAT_ID" --arg text "$MSG" '{chat_id: $chat, text: $text, parse_mode: "HTML", disable_web_page_preview: true}')
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
